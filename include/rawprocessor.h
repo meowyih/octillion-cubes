@@ -1,11 +1,16 @@
 
 
-#ifndef RAW_PROCESSOR_HEADER
-#define RAW_PROCESSOR_HEADER
+#ifndef OCTILLION_RAW_PROCESSOR_HEADER
+#define OCTILLION_RAW_PROCESSOR_HEADER
 
 #include "coreservercallback.h"
 
-class RawProcessor : public CoreServerCallback
+namespace octillion
+{
+    class RawProcessor;
+}
+
+class octillion::RawProcessor : public octillion::CoreServerCallback
 {
     public:
         RawProcessor();
@@ -22,4 +27,4 @@ class RawProcessor : public CoreServerCallback
         void decrypt( unsigned char* data, int datasize, unsigned char* key, int keysize );
 };
 
-#endif // RAW_PROCESSOR_HEADER
+#endif // OCTILLION_RAW_PROCESSOR_HEADER

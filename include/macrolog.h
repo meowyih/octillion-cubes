@@ -1,5 +1,5 @@
-#ifndef MACRO_LOG_HEADER
-#define MACRO_LOG_HEADER
+#ifndef OCTILLION_MACRO_LOG_HEADER
+#define OCTILLION_MACRO_LOG_HEADER
 
 #include <ctime>
 #include <iostream>
@@ -12,32 +12,37 @@
 // LOG_I() << "information message" << std::endl;
 // LOG_D() << "debug message" << std::endl;
 
-// MACRO_LOG_LEVEL 0 - disable all log
-// MACRO_LOG_LEVEL 1 - enable error
-// MACRO_LOG_LEVEL 2 - enable error, warning
-// MACRO_LOG_LEVEL 3 - enable error, warning, info
-// MACRO_LOG_LEVEL 4 - enable error, warning, info, debug
-#ifndef MACRO_LOG_LEVEL
-#define MACRO_LOG_LEVEL 4
+// OCTILLION_MACRO_LOG_LEVEL 0 - disable all log
+// OCTILLION_MACRO_LOG_LEVEL 1 - enable error
+// OCTILLION_MACRO_LOG_LEVEL 2 - enable error, warning
+// OCTILLION_MACRO_LOG_LEVEL 3 - enable error, warning, info
+// OCTILLION_MACRO_LOG_LEVEL 4 - enable error, warning, info, debug
+#ifndef OCTILLION_MACRO_LOG_LEVEL
+#define OCTILLION_MACRO_LOG_LEVEL 4
 #endif
 
 #define LOG_E()  \
-    if ( 1 > MACRO_LOG_LEVEL ) ;\
-    else MacroLog().log( 1 )
+    if ( 1 > OCTILLION_MACRO_LOG_LEVEL ) ;\
+    else octillion::MacroLog().log( 1 )
 
 #define LOG_W() \
-    if ( 2 > MACRO_LOG_LEVEL ) ;\
-    else MacroLog().log( 2 )
+    if ( 2 > OCTILLION_MACRO_LOG_LEVEL ) ;\
+    else octillion::MacroLog().log( 2 )
     
 #define LOG_I() \
-    if ( 3 > MACRO_LOG_LEVEL ) ;\
-    else MacroLog().log( 3 )
+    if ( 3 > OCTILLION_MACRO_LOG_LEVEL ) ;\
+    else octillion::MacroLog().log( 3 )
     
 #define LOG_D() \
-    if ( 4 > MACRO_LOG_LEVEL ) ;\
-    else MacroLog().log( 4 )       
+    if ( 4 > OCTILLION_MACRO_LOG_LEVEL ) ;\
+    else octillion::MacroLog().log( 4 )       
 
-class MacroLog
+namespace octillion
+{
+    class MacroLog;
+}
+
+class octillion::MacroLog
 {
     public:
         MacroLog() {};
@@ -77,4 +82,4 @@ class MacroLog
         std::ostringstream os;
 };
 
-#endif // MACRO_LOG_HEADER
+#endif // OCTILLION_MACRO_LOG_HEADER

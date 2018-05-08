@@ -13,10 +13,11 @@
 #include <errno.h>
 #include <sys/epoll.h>
 
+#include "ocerror.h"
 #include "macrolog.h"
 #include "coreserver.h"
 
-CoreServer::CoreServer( std::string port )
+octillion::CoreServer::CoreServer( std::string port )
 {    
     is_running_ = false;
     port_ = port;
@@ -32,7 +33,7 @@ CoreServer::CoreServer( std::string port )
         << " epoll_buffer_size_: " << epoll_buffer_size_;
 }
 
-CoreServer::~CoreServer()
+octillion::CoreServer::~CoreServer()
 {
     // not to block the thread by core_thread_.join()
     // caller should use stop() before delete the CoreServer from memory
@@ -42,7 +43,7 @@ CoreServer::~CoreServer()
     LOG_D() << "~CoreServer()";
 }
 
-std::error_code CoreServer::start()
+std::error_code octillion::CoreServer::start()
 {
     std::error_code error;
     struct epoll_event event;
@@ -52,18 +53,18 @@ std::error_code CoreServer::start()
     if ( is_running() )
     {
         LOG_E() << "CoreServer::start() leave, return E_SERVER_BUSY";
-        return CoreServerError::E_SERVER_BUSY;
+        return OcError::E_SERVER_BUSY;
     }
     
     error = init_server_socket();    
-    if ( CoreServerError::E_SUCCESS != error )
+    if ( OcError::E_SUCCESS != error )
     {
         LOG_E() << "CoreServer::start() leave, return " << error;
         return error;
     }
     
     error = set_nonblocking( server_fd_ );
-    if ( CoreServerError::E_SUCCESS != error )
+    if ( OcError::E_SUCCESS != error )
     {
         close( server_fd_ );
         LOG_E() << "CoreServer::start() leave, return " << error;
@@ -77,7 +78,7 @@ std::error_code CoreServer::start()
         LOG_E() << "CoreServer::start() leave, return E_SYS_LISTEN" << 
             " message: " << strerror( errno );
         
-        return CoreServerError::E_SYS_LISTEN;
+        return OcError::E_SYS_LISTEN;
     }
     
     epoll_fd_ = epoll_create1(0);
@@ -88,7 +89,7 @@ std::error_code CoreServer::start()
         LOG_E() << "CoreServer::start() leave, return E_SYS_EPOLL_CREATE" << 
             " message: " << strerror( errno );
         
-        return CoreServerError::E_SYS_EPOLL_CREATE;
+        return OcError::E_SYS_EPOLL_CREATE;
     }
     
     event.data.fd = server_fd_;
@@ -101,7 +102,7 @@ std::error_code CoreServer::start()
         LOG_E() << "CoreServer::start() leave, return E_SYS_EPOLL_CTL" << 
             " message: " << strerror( errno );
             
-        return CoreServerError::E_SYS_EPOLL_CTL;
+        return OcError::E_SYS_EPOLL_CTL;
     }
         
     // enter epoll_wait() looping thread
@@ -113,10 +114,10 @@ std::error_code CoreServer::start()
     
     LOG_D() << "CoreServer::start() leave, return E_SUCCESS";
     
-    return CoreServerError::E_SUCCESS;
+    return OcError::E_SUCCESS;
 }
 
-std::error_code CoreServer::stop()
+std::error_code octillion::CoreServer::stop()
 {
     LOG_D() << "CoreServer::stop() enter";
     
@@ -132,10 +133,10 @@ std::error_code CoreServer::stop()
     
     LOG_D() << "CoreServer::stop() leave";
     
-    return CoreServerError::E_SUCCESS;
+    return OcError::E_SUCCESS;
 }
 
-void CoreServer::core_task()
+void octillion::CoreServer::core_task()
 {
     int ret;
     struct epoll_event event;
@@ -216,7 +217,7 @@ void CoreServer::core_task()
                     }
                                        
                     std::error_code error = set_nonblocking( infd );
-                    if ( CoreServerError::E_SUCCESS != error )
+                    if ( OcError::E_SUCCESS != error )
                     {
                         // fatal error occurred
                         core_thread_flag_ = false;
@@ -299,7 +300,7 @@ void CoreServer::core_task()
     LOG_D() << "CoreServer::core_task leave";
 }
 
-std::error_code CoreServer::init_server_socket()
+std::error_code octillion::CoreServer::init_server_socket()
 {
     int err;
     
@@ -323,7 +324,7 @@ std::error_code CoreServer::init_server_socket()
             << " errno: " << errno
             << " message: " << strerror( errno );
                             
-        return CoreServerError::E_SYS_GETADDRINFO;
+        return OcError::E_SYS_GETADDRINFO;
     }
     
     for ( rp = servinfo; rp != NULL; rp = rp->ai_next )
@@ -354,15 +355,15 @@ std::error_code CoreServer::init_server_socket()
             << " errno: " << errno
             << " message: " << strerror( errno );
         
-        return CoreServerError::E_SYS_BIND;
+        return OcError::E_SYS_BIND;
     }
     
     freeaddrinfo( servinfo );
         
-    return CoreServerError::E_SUCCESS;
+    return OcError::E_SUCCESS;
 }
 
-std::error_code CoreServer::set_nonblocking( int fd )
+std::error_code octillion::CoreServer::set_nonblocking( int fd )
 {
     int flags, err;
     
@@ -370,7 +371,7 @@ std::error_code CoreServer::set_nonblocking( int fd )
     
     if ( flags == -1 )
     {
-        return CoreServerError::E_SYS_FCNTL;
+        return OcError::E_SYS_FCNTL;
     }
     
     flags |= O_NONBLOCK;
@@ -382,54 +383,8 @@ std::error_code CoreServer::set_nonblocking( int fd )
             " fd: " << fd << " errno: " << errno
             << " message: " << strerror( errno );
             
-        return CoreServerError::E_SYS_FCNTL;
+        return OcError::E_SYS_FCNTL;
     }
     
-    return CoreServerError::E_SUCCESS;
-}
-
-// inject CoreServerError into std::error
-namespace 
-{ 
-    // anonymous namespace
-    struct CoreServerErrorCategory : std::error_category
-    {
-        const char* name() const noexcept override;
-        std::string message(int ev) const override;
-    };
-      
-    const char* CoreServerErrorCategory::name() const noexcept
-    {
-        return "CoreServer";
-    }
-      
-    std::string CoreServerErrorCategory::message(int ev) const
-    {
-        switch (static_cast<CoreServerError>(ev))
-        {
-            case CoreServerError::E_SUCCESS:
-                return "Success";
-                
-            case CoreServerError::E_SERVER_BUSY:
-                return "Server is already running";   
-                
-            case CoreServerError::E_SYS_GETADDRINFO:
-            case CoreServerError::E_SYS_BIND:
-            case CoreServerError::E_SYS_FCNTL:
-                return "call standard strerror( errno ) to get more information";
-            
-            case CoreServerError::E_FATAL:
-                return "Fatal error";
-                
-            default:
-                return "Unknown error";
-        }
-    }
-  
-    const CoreServerErrorCategory theCoreServerErrorCategory {};
-} // anonymous namespace
- 
-std::error_code make_error_code( CoreServerError e )
-{
-    return {static_cast<int>(e), theCoreServerErrorCategory};
+    return OcError::E_SUCCESS;
 }

@@ -6,6 +6,7 @@
 
 #include <signal.h>
 
+#include "ocerror.h"
 #include "coreserver.h"
 #include "rawprocessor.h"
 #include "macrolog.h"
@@ -30,14 +31,14 @@ int main ()
     // don't forget to change iptables
     // iptables -A ufw-user-input -p tcp -m tcp --dport 8888 -j ACCEPT
     // iptables -A ufw-user-output -p tcp -m tcp --dport 8888 -j ACCEPT
-    CoreServer cs( "8888" );
-    RawProcessor* rawprocessor = new RawProcessor();
+    octillion::CoreServer cs( "8888" );
+    octillion::RawProcessor* rawprocessor = new octillion::RawProcessor();
     
     cs.set_callback( rawprocessor );
     
     err = cs.start();
         
-    if ( err != CoreServerError::E_SUCCESS )
+    if ( err != OcError::E_SUCCESS )
     {
         std::cout << err << std::endl;
         return 1;

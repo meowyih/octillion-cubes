@@ -1,15 +1,18 @@
+#ifndef OCTILLION_CORE_SERVER_HEADER
+#define OCTILLION_CORE_SERVER_HEADER
 
 #include <string>
 #include <system_error>
 
 #include "coreservercallback.h"
 
-#ifndef CORE_SERVER_HEADER
-#define CORE_SERVER_HEADER
-
+namespace octillion
+{
+    class CoreServer;
+}
 
 // CodeServer definition
-class CoreServer 
+class octillion::CoreServer 
 {
     public:
         // init the core server with specific port
@@ -55,28 +58,4 @@ class CoreServer
         std::thread* core_thread_;
 };
 
-// inject error code into std:error
-enum class CoreServerError
-{
-    E_SUCCESS = 0,
-    E_SERVER_BUSY = 10,
-    
-    
-    E_SYS_GETADDRINFO = 20,
-    E_SYS_BIND = 30,
-    E_SYS_FCNTL = 40,
-    E_SYS_LISTEN = 50,
-    E_SYS_EPOLL_CREATE = 60,
-    E_SYS_EPOLL_CTL = 70,
-    
-    E_FATAL = 999,    
-};
-
-namespace std
-{
-    template<> struct is_error_code_enum<CoreServerError> : true_type {};
-}
- 
-std::error_code make_error_code( CoreServerError );
-
-#endif // CORE_SERVER_HEADER
+#endif // OCTILLION_CORE_SERVER_HEADER

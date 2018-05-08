@@ -1,8 +1,13 @@
 
-#ifndef CORE_SERVER_CALLBACK_HEADER
-#define CORE_SERVER_CALLBACK_HEADER
+#ifndef OCTILLION_CORE_SERVER_CALLBACK_HEADER
+#define OCTILLION_CORE_SERVER_CALLBACK_HEADER
 
-class CoreServerCallback
+namespace octillion
+{
+    class CoreServerCallback;
+}
+
+class octillion::CoreServerCallback
 {
     public:
         ~CoreServerCallback() {}
@@ -14,4 +19,4 @@ class CoreServerCallback
         virtual void disconnect( int fd ) = 0;
 };
 
-#endif // CORE_SERVER_CALLBACK_HEADER
+#endif // OCTILLION_CORE_SERVER_CALLBACK_HEADER
