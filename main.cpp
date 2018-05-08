@@ -31,12 +31,13 @@ int main ()
     // don't forget to change iptables
     // iptables -A ufw-user-input -p tcp -m tcp --dport 8888 -j ACCEPT
     // iptables -A ufw-user-output -p tcp -m tcp --dport 8888 -j ACCEPT
-    octillion::CoreServer cs( "8888" );
+    octillion::CoreServer::get_instance();
+    
     octillion::RawProcessor* rawprocessor = new octillion::RawProcessor();
     
-    cs.set_callback( rawprocessor );
+    octillion::CoreServer::get_instance().set_callback( rawprocessor );
     
-    err = cs.start();
+    err = octillion::CoreServer::get_instance().start( "8888" );
         
     if ( err != OcError::E_SUCCESS )
     {
@@ -53,7 +54,7 @@ int main ()
         }
     }
     
-    cs.stop();
+    octillion::CoreServer::get_instance().stop();
     delete rawprocessor;
 
     return 0;

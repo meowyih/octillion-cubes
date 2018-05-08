@@ -14,14 +14,17 @@ namespace octillion
 // CodeServer definition
 class octillion::CoreServer 
 {
+    // singleton
     public:
-        // init the core server with specific port
-        CoreServer( std::string port );
+        static CoreServer& get_instance()
+        {
+            static CoreServer instance;
+            return instance;
+        }
         
-        ~CoreServer();
-        
+    public:        
         // start the server thread
-        std::error_code start();
+        std::error_code start( std::string port );
         
         // raise the stop flag and wait until the server thread die
         std::error_code stop();
@@ -33,6 +36,9 @@ class octillion::CoreServer
         void set_callback( CoreServerCallback* callback ) { callback_ = callback; }
         
     private:
+        CoreServer();
+        ~CoreServer();
+        
         void core_task();
         
         std::error_code init_server_socket();
@@ -40,12 +46,18 @@ class octillion::CoreServer
         
     private:
         // epoll timeout
-        int epoll_timeout_;
+        int epoll_timeout_;        
         
         // epoll event buffer size
         int epoll_buffer_size_;
         
         CoreServerCallback* callback_;
+        
+    public:                
+        // avoid accidentally copy
+        CoreServer( CoreServer const& ) = delete;
+        void operator = ( CoreServer const& ) = delete;        
+
     
     private:
         std::string port_;
@@ -56,6 +68,11 @@ class octillion::CoreServer
         bool core_thread_flag_;
         
         std::thread* core_thread_;
+    
+    private:
+        const int kEpollTimeout = 5 * 1000;
+        const int kEpollBufferSize = 64;
+        
 };
 
 #endif // OCTILLION_CORE_SERVER_HEADER

@@ -17,20 +17,11 @@
 #include "macrolog.h"
 #include "coreserver.h"
 
-octillion::CoreServer::CoreServer( std::string port )
-{    
-    is_running_ = false;
-    port_ = port;
-    server_fd_ = -1;
-    epoll_fd_ = -1;
-    epoll_timeout_ = 5 * 1000;
-    epoll_buffer_size_ = 64;
-    core_thread_ = NULL;
-    callback_ = NULL;
+octillion::CoreServer::CoreServer()
+{   
+    LOG_D() << "CoreServer()";
     
-    LOG_D() << "CoreServer(), port_: " << port_ 
-        << " epoll_timeout_: " << epoll_timeout_ << "ms " 
-        << " epoll_buffer_size_: " << epoll_buffer_size_;
+    is_running_ = false;
 }
 
 octillion::CoreServer::~CoreServer()
@@ -43,12 +34,14 @@ octillion::CoreServer::~CoreServer()
     LOG_D() << "~CoreServer()";
 }
 
-std::error_code octillion::CoreServer::start()
+std::error_code octillion::CoreServer::start( std::string port )
 {
     std::error_code error;
     struct epoll_event event;
     
-    LOG_D() << "CoreServer::start() enter";
+    port_ = port;
+        
+    LOG_D() << "CoreServer::start() enter, port:" << port;
         
     if ( is_running() )
     {
@@ -93,7 +86,7 @@ std::error_code octillion::CoreServer::start()
     }
     
     event.data.fd = server_fd_;
-    event.events = EPOLLIN;
+    event.events = EPOLLIN | EPOLLET;
     
     if ( epoll_ctl( epoll_fd_, EPOLL_CTL_ADD, server_fd_, &event ) == -1 )
     {
@@ -142,12 +135,12 @@ void octillion::CoreServer::core_task()
     struct epoll_event event;
     struct epoll_event* events;
         
-    events = new epoll_event[ epoll_buffer_size_ ]; 
+    events = new epoll_event[ kEpollBufferSize ]; 
     
     while( core_thread_flag_ )
     {
         LOG_D() << "CoreServer::core_task, epoll_wait() enter";
-        ret = epoll_wait( epoll_fd_, events, epoll_buffer_size_, epoll_timeout_ );
+        ret = epoll_wait( epoll_fd_, events, kEpollBufferSize, kEpollTimeout );
         
         LOG_D() << "CoreServer::core_task, epoll_wait() leave, return event size: " << ret;
                 
@@ -228,7 +221,7 @@ void octillion::CoreServer::core_task()
                     }
                     
                     event.data.fd = infd;
-                    event.events = EPOLLIN;
+                    event.events = EPOLLIN |EPOLLET;
                     ret = epoll_ctl( epoll_fd_, EPOLL_CTL_ADD, infd, &event );
                     
                     if( ret == -1 )
@@ -253,33 +246,38 @@ void octillion::CoreServer::core_task()
             }
             else
             {
-                // some data is ready for read 
-                ssize_t count;
-                char buf[512];
-                
-                count = read( events[i].data.fd, buf, sizeof buf );
-                
-                if ( count == -1 )
+                // some data is ready for read, under EPOLLET mode, we read until there is no data
+                while( 1 )
                 {
-                    // if errno is EAGAIN, it means there is no more data
-                    if ( errno != EAGAIN )
-                    {
-                        // error!
-                        LOG_E() << "CoreServer::core_task, failed to set read socket: " << events[i].data.fd
-                            << " message: " << strerror( errno );
-                    }
-                }
-                else if ( count == 0 )
-                {
-                    // also, no more data
-                }
-                else
-                {
-                    LOG_D() << "CoreServer::core_task, read socket: " << events[i].data.fd << " " << count << " bytes";
+                    ssize_t count;
+                    char buf[512];
                     
-                    if ( callback_ != NULL )
+                    count = read( events[i].data.fd, buf, sizeof buf );
+                    
+                    if ( count == -1 )
                     {
-                        callback_->recv( events[i].data.fd, buf, (int)count );
+                        // if errno is EAGAIN, it means there is no more data
+                        if ( errno != EAGAIN )
+                        {
+                            // error!
+                            LOG_E() << "CoreServer::core_task, failed to set read socket: " << events[i].data.fd
+                                << " message: " << strerror( errno );
+                        }
+                        break;
+                    }
+                    else if ( count == 0 )
+                    {
+                        // also, no more data
+                        break;
+                    }
+                    else
+                    {
+                        LOG_D() << "CoreServer::core_task, read socket: " << events[i].data.fd << " " << count << " bytes";
+                        
+                        if ( callback_ != NULL )
+                        {
+                            callback_->recv( events[i].data.fd, buf, (int)count );
+                        }
                     }
                 }
             }
