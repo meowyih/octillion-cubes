@@ -19,7 +19,7 @@
 
 octillion::CoreServer::CoreServer()
 {   
-    LOG_D() << "CoreServer()";
+    LOG_D(tag_) << "CoreServer()";
     
     is_running_ = false;
 }
@@ -31,7 +31,7 @@ octillion::CoreServer::~CoreServer()
     core_thread_flag_ = false;
     core_thread_ = NULL;
     
-    LOG_D() << "~CoreServer()";
+    LOG_D(tag_) << "~CoreServer()";
 }
 
 std::error_code octillion::CoreServer::start( std::string port )
@@ -41,18 +41,18 @@ std::error_code octillion::CoreServer::start( std::string port )
     
     port_ = port;
         
-    LOG_D() << "CoreServer::start() enter, port:" << port;
+    LOG_D(tag_) << "start() enter, port:" << port;
         
     if ( is_running() )
     {
-        LOG_E() << "CoreServer::start() leave, return E_SERVER_BUSY";
+        LOG_E(tag_) << "start() leave, return E_SERVER_BUSY";
         return OcError::E_SERVER_BUSY;
     }
     
     error = init_server_socket();    
     if ( OcError::E_SUCCESS != error )
     {
-        LOG_E() << "CoreServer::start() leave, return " << error;
+        LOG_E(tag_) << "start() leave, return " << error;
         return error;
     }
     
@@ -60,7 +60,7 @@ std::error_code octillion::CoreServer::start( std::string port )
     if ( OcError::E_SUCCESS != error )
     {
         close( server_fd_ );
-        LOG_E() << "CoreServer::start() leave, return " << error;
+        LOG_E(tag_) << "start() leave, return " << error;
         return error;
     }
     
@@ -68,7 +68,7 @@ std::error_code octillion::CoreServer::start( std::string port )
     {
         close( server_fd_ );
         
-        LOG_E() << "CoreServer::start() leave, return E_SYS_LISTEN" << 
+        LOG_E(tag_) << "start() leave, return E_SYS_LISTEN" << 
             " message: " << strerror( errno );
         
         return OcError::E_SYS_LISTEN;
@@ -79,7 +79,7 @@ std::error_code octillion::CoreServer::start( std::string port )
     {
         close( server_fd_ );
         
-        LOG_E() << "CoreServer::start() leave, return E_SYS_EPOLL_CREATE" << 
+        LOG_E(tag_) << "start() leave, return E_SYS_EPOLL_CREATE" << 
             " message: " << strerror( errno );
         
         return OcError::E_SYS_EPOLL_CREATE;
@@ -92,7 +92,7 @@ std::error_code octillion::CoreServer::start( std::string port )
     {
         close( server_fd_ );
         
-        LOG_E() << "CoreServer::start() leave, return E_SYS_EPOLL_CTL" << 
+        LOG_E(tag_) << "start() leave, return E_SYS_EPOLL_CTL" << 
             " message: " << strerror( errno );
             
         return OcError::E_SYS_EPOLL_CTL;
@@ -102,31 +102,70 @@ std::error_code octillion::CoreServer::start( std::string port )
     core_thread_flag_ = true;
     is_running_ = true;
     
-    LOG_D() << "CoreServer::start() launch server thread";
+    LOG_D(tag_) << "start() launch server thread";
     core_thread_ = new std::thread( &CoreServer::core_task, this );
     
-    LOG_D() << "CoreServer::start() leave, return E_SUCCESS";
+    LOG_D(tag_) << "start() leave, return E_SUCCESS";
     
     return OcError::E_SUCCESS;
 }
 
 std::error_code octillion::CoreServer::stop()
 {
-    LOG_D() << "CoreServer::stop() enter";
+    LOG_D(tag_) << "stop() enter";
     
     // set the stop flag and wait it until finish
     core_thread_flag_ = false;
     
     if ( core_thread_ != NULL)
     {
-        LOG_D() << "CoreServer::stop() wait server thread die";
+        LOG_I(tag_) << "stop() wait server thread die";
         core_thread_->join();
         core_thread_ = NULL;
     }
     
-    LOG_D() << "CoreServer::stop() leave";
+    LOG_D(tag_) << "stop() leave";
     
     return OcError::E_SUCCESS;
+}
+
+void octillion::CoreServer::closesocket( int fd )
+{
+    LOG_D(tag_) << "closesocket() enter, fd: " << fd;
+    close( fd );    
+}
+
+std::error_code octillion::CoreServer::senddata( int socketfd, const void *buf, size_t len, size_t &sendbytes )
+{
+    ssize_t ret = send( socketfd, buf, len, 0 );
+    
+    sendbytes = 0;
+    
+    if ( ret == -1 )
+    {
+        if ( errno == EAGAIN || errno == EWOULDBLOCK )
+        {
+            LOG_W(tag_) << "send() EAGAIN/EWOULDBLOCK fd:" << socketfd;
+            return OcError::E_SYS_SEND_AGAIN;
+        }
+        else
+        {
+            LOG_E(tag_) << "send() failed fd:" << socketfd << " errno:" << errno << " msg:" << strerror( errno );
+            return OcError::E_SYS_SEND;
+        }
+    }
+    else if ( ret != len )
+    {
+        sendbytes = ret;
+        
+        LOG_W(tag_) << "send() buffer insufficient send/total" << ret << "/" << len;
+        return OcError::E_SYS_SEND_PARTIAL;
+    }
+    else
+    {
+        sendbytes = ret;
+        return OcError::E_SUCCESS;
+    }
 }
 
 void octillion::CoreServer::core_task()
@@ -139,14 +178,14 @@ void octillion::CoreServer::core_task()
     
     while( core_thread_flag_ )
     {
-        LOG_D() << "CoreServer::core_task, epoll_wait() enter";
+        LOG_D(tag_) << "core_task, epoll_wait() enter";
         ret = epoll_wait( epoll_fd_, events, kEpollBufferSize, kEpollTimeout );
         
-        LOG_D() << "CoreServer::core_task, epoll_wait() leave, return event size: " << ret;
+        LOG_D(tag_) << "core_task, epoll_wait() ret events: " << ret;
                 
         if ( ret == -1 )
         {
-            LOG_E() << "CoreServer::core_task, epoll_wait() returns -1, errno: " << errno << " message: " << strerror( errno );
+            LOG_E(tag_) << "core_task, epoll_wait() returns -1, errno: " << errno << " message: " << strerror( errno );
             break;
         }
         
@@ -159,7 +198,7 @@ void octillion::CoreServer::core_task()
                 // error occurred, disconnect this fd
                 close( events[i].data.fd );
                 
-                LOG_D() << "CoreServer::core_task, close socket fd: " << events[i].data.fd;
+                LOG_D(tag_) << "core_task, close socket fd: " << events[i].data.fd;
                 
                 if ( callback_ != NULL )
                 {
@@ -192,7 +231,7 @@ void octillion::CoreServer::core_task()
                         else
                         {
                             // error occurred
-                            LOG_E() << "failed to accepted incoming connection, errno:" << errno <<
+                            LOG_E(tag_) << "failed to accepted incoming connection, errno:" << errno <<
                                 " message: " << strerror( errno );
                             break;
                         }
@@ -205,7 +244,7 @@ void octillion::CoreServer::core_task()
                     if ( ret == 0 )
                     {
                         // accepted connection fd: infd, host name: hbuf, service name: sbuf
-                        LOG_D() << "CoreServer::core_task, accept socket fd: " << infd <<
+                        LOG_D(tag_) << "core_task, accept socket fd: " << infd <<
                             "host: " << hbuf << " service:" << sbuf;
                     }
                                        
@@ -215,7 +254,7 @@ void octillion::CoreServer::core_task()
                         // fatal error occurred
                         core_thread_flag_ = false;
                         
-                        LOG_E() << "CoreServer::core_task, failed to set socket to non-blocking, err: " << error;
+                        LOG_E(tag_) << "core_task, failed to set socket to non-blocking, err: " << error;
                         
                         break;                        
                     }
@@ -230,7 +269,7 @@ void octillion::CoreServer::core_task()
                         core_thread_flag_ = false;
                         break;
                         
-                        LOG_E() << "CoreServer::core_task, failed to set socket to non-blocking, fd: " << infd 
+                        LOG_E(tag_) << "core_task, failed to set socket to non-blocking, fd: " << infd 
                             << " errno: " << errno
                             << " message: " << strerror( errno );
                     }
@@ -260,7 +299,7 @@ void octillion::CoreServer::core_task()
                         if ( errno != EAGAIN )
                         {
                             // error!
-                            LOG_E() << "CoreServer::core_task, failed to set read socket: " << events[i].data.fd
+                            LOG_E(tag_) << "core_task, failed to set read socket: " << events[i].data.fd
                                 << " message: " << strerror( errno );
                         }
                         break;
@@ -272,11 +311,11 @@ void octillion::CoreServer::core_task()
                     }
                     else
                     {
-                        LOG_D() << "CoreServer::core_task, read socket: " << events[i].data.fd << " " << count << " bytes";
+                        LOG_D(tag_) << "core_task, read socket: " << events[i].data.fd << " " << count << " bytes";
                         
                         if ( callback_ != NULL )
                         {
-                            callback_->recv( events[i].data.fd, buf, (int)count );
+                            callback_->recv( events[i].data.fd, (uint8_t*)buf, (size_t)count );
                         }
                     }
                 }
@@ -286,7 +325,7 @@ void octillion::CoreServer::core_task()
     
     if ( server_fd_ >= 0 )
     {
-        LOG_I() << "CoreServer::core_task, close server fd: " << server_fd_;
+        LOG_I(tag_) << "core_task, close server fd: " << server_fd_;
         close( server_fd_ );
     }
     
@@ -295,7 +334,7 @@ void octillion::CoreServer::core_task()
     
     delete [] events;  
 
-    LOG_D() << "CoreServer::core_task leave";
+    LOG_D(tag_) << "core_task leave";
 }
 
 std::error_code octillion::CoreServer::init_server_socket()
@@ -318,7 +357,7 @@ std::error_code octillion::CoreServer::init_server_socket()
     
     if ( err != 0 )
     {
-        LOG_E() << "CoreServer::init_server_socket, getaddrinfo() failed"
+        LOG_E(tag_) << "init_server_socket, getaddrinfo() failed"
             << " errno: " << errno
             << " message: " << strerror( errno );
                             
@@ -349,7 +388,7 @@ std::error_code octillion::CoreServer::init_server_socket()
         server_fd_ = -1;
         freeaddrinfo( servinfo );
         
-        LOG_E() << "CoreServer::init_server_socket, bind() failed"
+        LOG_E(tag_) << "init_server_socket, bind() failed"
             << " errno: " << errno
             << " message: " << strerror( errno );
         
@@ -377,7 +416,7 @@ std::error_code octillion::CoreServer::set_nonblocking( int fd )
     
     if ( err == -1 )
     {
-        LOG_E() << "CoreServer::set_nonblocking, fcntl() failed"
+        LOG_E(tag_) << "set_nonblocking, fcntl() failed"
             " fd: " << fd << " errno: " << errno
             << " message: " << strerror( errno );
             

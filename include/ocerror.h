@@ -7,15 +7,18 @@
 enum class OcError
 {
     E_SUCCESS = 0,
-    E_SERVER_BUSY = 10,
     
-    
+    // core server
+    E_SERVER_BUSY = 10,    
     E_SYS_GETADDRINFO = 20,
     E_SYS_BIND = 30,
     E_SYS_FCNTL = 40,
     E_SYS_LISTEN = 50,
     E_SYS_EPOLL_CREATE = 60,
     E_SYS_EPOLL_CTL = 70,
+    E_SYS_SEND_AGAIN = 80,
+    E_SYS_SEND_PARTIAL = 90,
+    E_SYS_SEND = 100,    
     
     E_FATAL = 999,    
 };

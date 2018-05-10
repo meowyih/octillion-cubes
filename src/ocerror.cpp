@@ -30,6 +30,9 @@ namespace
             case OcError::E_SYS_GETADDRINFO:
             case OcError::E_SYS_BIND:
             case OcError::E_SYS_FCNTL:
+            case OcError::E_SYS_SEND:
+            case OcError::E_SYS_SEND_AGAIN:
+            case OcError::E_SYS_SEND_PARTIAL:
                 return "call standard strerror( errno ) to get more information";
             
             case OcError::E_FATAL:

@@ -2,6 +2,7 @@
 #define OCTILLION_CORE_SERVER_HEADER
 
 #include <string>
+#include <thread>
 #include <system_error>
 
 #include "coreservercallback.h"
@@ -14,6 +15,9 @@ namespace octillion
 // CodeServer definition
 class octillion::CoreServer 
 {
+    private:
+        const std::string tag_ = "CoreServer";
+        
     // singleton
     public:
         static CoreServer& get_instance()
@@ -28,6 +32,12 @@ class octillion::CoreServer
         
         // raise the stop flag and wait until the server thread die
         std::error_code stop();
+        
+        // send data via a socket fd
+        std::error_code senddata( int socketfd, const void *buf, size_t len, size_t &sendbytes );
+        
+        // send data via a socket fd
+        void closesocket( int socketfd );
         
         // check if server thread is still running
         bool is_running() { return is_running_; }
