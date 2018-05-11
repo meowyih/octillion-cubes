@@ -34,7 +34,7 @@ class octillion::CoreServer
         std::error_code stop();
         
         // send data via a socket fd
-        std::error_code senddata( int socketfd, const void *buf, size_t len, size_t &sendbytes );
+        std::error_code senddata( int socketfd, const void *buf, size_t len );
         
         // send data via a socket fd
         void closesocket( int socketfd );

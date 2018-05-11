@@ -1,5 +1,3 @@
-
-
 #ifndef OCTILLION_RAW_PROCESSOR_HEADER
 #define OCTILLION_RAW_PROCESSOR_HEADER
 
@@ -37,7 +35,7 @@ class octillion::RawProcessorClient
         uint8_t key_[kRawProcessorMaxKeyPoolSize];
         
         size_t datasize_, dataanchor_;
-        uint8_t* data_;
+        uint8_t* data_;        
 };
 
 class octillion::RawProcessor : public octillion::CoreServerCallback
@@ -55,6 +53,9 @@ class octillion::RawProcessor : public octillion::CoreServerCallback
         virtual void recv( int fd, uint8_t* data, size_t datasize) override;
         virtual void disconnect( int fd ) override;
         
+    public:
+        std::error_code senddata( int fd, uint8_t* data, size_t datasize );
+        
     private:        
         void encrypt( uint8_t* data, size_t datasize, uint8_t* key, size_t keysize );
         void decrypt( uint8_t* data, size_t datasize, uint8_t* key, size_t keysize );
@@ -71,7 +72,7 @@ class octillion::RawProcessor : public octillion::CoreServerCallback
 
 namespace octillion
 {
-    const unsigned char kRawProcessorKeyPool[] = {
+    const uint8_t kRawProcessorKeyPool[] = {
       0x00, 0xe0, 0x07, 0xe7, 0x00, 0x7c, 0x07, 0xe7, 0xf8, 0xfe, 0x20, 0x0f,
       0xff, 0xff, 0xf8, 0x18, 0xff, 0x9f, 0xf8, 0x18, 0xff, 0x0f, 0xf8, 0x18,
       0xec, 0x1f, 0xc0, 0x78, 0x80, 0x7f, 0x00, 0x3f, 0x00, 0x7c, 0x00, 0x1f,

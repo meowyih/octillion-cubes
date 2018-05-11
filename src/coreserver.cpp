@@ -121,6 +121,7 @@ std::error_code octillion::CoreServer::stop()
     {
         LOG_I(tag_) << "stop() wait server thread die";
         core_thread_->join();
+        delete core_thread_;
         core_thread_ = NULL;
     }
     
@@ -135,12 +136,10 @@ void octillion::CoreServer::closesocket( int fd )
     close( fd );    
 }
 
-std::error_code octillion::CoreServer::senddata( int socketfd, const void *buf, size_t len, size_t &sendbytes )
+std::error_code octillion::CoreServer::senddata( int socketfd, const void *buf, size_t len )
 {
     ssize_t ret = send( socketfd, buf, len, 0 );
-    
-    sendbytes = 0;
-    
+        
     if ( ret == -1 )
     {
         if ( errno == EAGAIN || errno == EWOULDBLOCK )
@@ -155,15 +154,14 @@ std::error_code octillion::CoreServer::senddata( int socketfd, const void *buf, 
         }
     }
     else if ( ret != len )
-    {
-        sendbytes = ret;
-        
-        LOG_W(tag_) << "send() buffer insufficient send/total" << ret << "/" << len;
-        return OcError::E_SYS_SEND_PARTIAL;
+    {        
+        // if only send partial data, recussively try again
+        LOG_W(tag_) << "send() buffer insufficient send/total" << ret << "/" << len << " send again";
+        return senddata( socketfd, (const void*)((uint8_t*)buf + ret), len - ret );
     }
     else
     {
-        sendbytes = ret;
+        LOG_D( tag_ ) << "sendata, send " << ret << " bytes";
         return OcError::E_SUCCESS;
     }
 }
@@ -245,7 +243,7 @@ void octillion::CoreServer::core_task()
                     {
                         // accepted connection fd: infd, host name: hbuf, service name: sbuf
                         LOG_D(tag_) << "core_task, accept socket fd: " << infd <<
-                            "host: " << hbuf << " service:" << sbuf;
+                            " host: " << hbuf;
                     }
                                        
                     std::error_code error = set_nonblocking( infd );
@@ -289,7 +287,7 @@ void octillion::CoreServer::core_task()
                 while( 1 )
                 {
                     ssize_t count;
-                    char buf[512];
+                    char buf[3];
                     
                     count = read( events[i].data.fd, buf, sizeof buf );
                     

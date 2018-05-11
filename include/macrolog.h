@@ -51,7 +51,7 @@ namespace octillion
 class octillion::MacroLog
 {    
     public:    
-        std::vector<std::string> blacklist_ = { "RawProcessors" };
+        std::vector<std::string> blacklist_ = { "fill-in-tag" };
         
     public:        
         MacroLog( std::string tag = "" ) { tag_ = tag; }
