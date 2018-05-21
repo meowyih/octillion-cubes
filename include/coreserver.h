@@ -4,6 +4,9 @@
 #include <string>
 #include <thread>
 #include <system_error>
+#include <map>
+
+#include <openssl/ssl.h>
 
 #include "coreservercallback.h"
 
@@ -53,7 +56,10 @@ class octillion::CoreServer
         
         std::error_code init_server_socket();
         std::error_code set_nonblocking( int fd );
-        
+
+    private: // SSL usage
+        std::map<int, SSL*> ssl_;        
+    
     private:
         // epoll timeout
         int epoll_timeout_;        

@@ -1,6 +1,6 @@
 
 CPP = g++
-CPPFLAGS = -O3 -ansi -std=c++11 -pthread -Iinclude
+CPPFLAGS = -O3 -ansi -std=c++11 -pthread -Iinclude -L/usr/local/lib -lssl -lcrypto
 VPATH = src include
 
 OBJDIR = obj

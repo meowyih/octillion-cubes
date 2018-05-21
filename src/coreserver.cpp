@@ -2,6 +2,7 @@
 #include <cstring>
 #include <iostream>
 #include <thread>
+#include <map>
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -12,6 +13,9 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <sys/epoll.h>
+
+#include <openssl/ssl.h>
+#include <openssl/err.h>
 
 #include "ocerror.h"
 #include "macrolog.h"
@@ -97,7 +101,7 @@ std::error_code octillion::CoreServer::start( std::string port )
             
         return OcError::E_SYS_EPOLL_CTL;
     }
-        
+
     // enter epoll_wait() looping thread
     core_thread_flag_ = true;
     is_running_ = true;
@@ -173,6 +177,32 @@ void octillion::CoreServer::core_task()
     struct epoll_event* events;
         
     events = new epoll_event[ kEpollBufferSize ]; 
+
+    // init SSL
+    SSL_load_error_strings();
+    OpenSSL_add_ssl_algorithms();
+    
+    SSL_CTX *ctx = SSL_CTX_new(SSLv23_server_method());
+    
+    if (!ctx) 
+    {
+        LOG_E(tag_) << "Unable to create SSL context";
+        core_thread_flag_ = false;
+    }
+    
+    SSL_CTX_set_ecdh_auto(ctx, 1);
+    
+    if (SSL_CTX_use_certificate_file(ctx, "cert.pem", SSL_FILETYPE_PEM) <= 0) 
+    {
+        LOG_E(tag_) << "Unable to set certificate";
+        core_thread_flag_ = false;
+    }
+    
+    if (SSL_CTX_use_PrivateKey_file(ctx, "cert.key", SSL_FILETYPE_PEM) <= 0 ) 
+    {
+        LOG_E(tag_) << "Unable to set private key";
+        core_thread_flag_ = false;
+    }
     
     while( core_thread_flag_ )
     {
@@ -202,7 +232,13 @@ void octillion::CoreServer::core_task()
                 {
                     callback_->disconnect( events[i].data.fd );
                 }
-                
+
+                std::map<int, SSL*>::iterator iter = ssl_.find( events[i].data.fd );
+                if ( iter != ssl_.end() )
+                {
+                    ssl_.erase( iter );
+                }
+
                 continue;
             }
             else if ( server_fd_ == events[i].data.fd )
@@ -271,7 +307,13 @@ void octillion::CoreServer::core_task()
                             << " errno: " << errno
                             << " message: " << strerror( errno );
                     }
+
+                    // ssl
+                    SSL *ssl = SSL_new( ctx );
+                    SSL_set_accept_state( ssl );
+                    SSL_set_fd( ssl, infd );
                     
+                    ssl_.insert( std::pair<int, SSL*>(infd, ssl));                    
                     // callback, notify there is a new connection infd
                     if ( callback_ != NULL )
                     {
@@ -284,13 +326,31 @@ void octillion::CoreServer::core_task()
             else
             {
                 // some data is ready for read, under EPOLLET mode, we read until there is no data
+                std::map<int,SSL*>::iterator it = ssl_.find( events[i].data.fd );
+                if ( it == ssl_.end() )
+                {
+                    LOG_E(tag_) << "fatal ssl error";
+                    return;
+                }
+
+                SSL* ssl = it->second;
+                if ( ! SSL_is_init_finished(ssl) )
+                {
+                    LOG_D(tag_) << "enter SSL_do_handshake";
+                    SSL_do_handshake(ssl);
+                    continue;
+                }
+
+                LOG_D(tag_) << "SSL established";
+
                 while( 1 )
                 {
                     ssize_t count;
-                    char buf[3];
+                    char buf[128];
                     
-                    count = read( events[i].data.fd, buf, sizeof buf );
-                    
+                    // count = read( events[i].data.fd, buf, sizeof buf );
+                    count = SSL_read( ssl, buf, sizeof buf );    
+
                     if ( count == -1 )
                     {
                         // if errno is EAGAIN, it means there is no more data
@@ -305,6 +365,7 @@ void octillion::CoreServer::core_task()
                     else if ( count == 0 )
                     {
                         // also, no more data
+                        LOG_D(tag_) << "core_task, read socket 0 bytes";
                         break;
                     }
                     else
