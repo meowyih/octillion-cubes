@@ -137,7 +137,18 @@ std::error_code octillion::CoreServer::stop()
 void octillion::CoreServer::closesocket( int fd )
 {
     LOG_D(tag_) << "closesocket() enter, fd: " << fd;
-    close( fd );    
+    close( fd );
+    
+    std::map<int, SSL*>::iterator iter = ssl_.find( fd );
+    if ( iter != ssl_.end() )
+    {
+        SSL_free( iter->second );
+        ssl_.erase( iter );
+    }
+    else
+    {
+        LOG_E(tag_) << "closesocket fd:" << fd << " does not exist in ssl_";
+    }
 }
 
 std::error_code octillion::CoreServer::senddata( int socketfd, const void *buf, size_t len )
@@ -204,6 +215,14 @@ void octillion::CoreServer::core_task()
         core_thread_flag_ = false;
     }
     
+    // init server fd ssl
+    SSL *ssl = SSL_new( ctx );
+    SSL_set_accept_state( ssl );
+    SSL_set_fd( ssl, server_fd_ );
+    
+    ssl_.insert( std::pair<int, SSL*>(server_fd_, ssl));
+    
+    // epoll while loop
     while( core_thread_flag_ )
     {
         LOG_D(tag_) << "core_task, epoll_wait() enter";
@@ -236,7 +255,12 @@ void octillion::CoreServer::core_task()
                 std::map<int, SSL*>::iterator iter = ssl_.find( events[i].data.fd );
                 if ( iter != ssl_.end() )
                 {
+                    SSL_free( iter->second );
                     ssl_.erase( iter );
+                }
+                else
+                {
+                    LOG_E(tag_) << "fd:" << events[i].data.fd << " does not exist in ssl_";
                 }
 
                 continue;
@@ -313,7 +337,8 @@ void octillion::CoreServer::core_task()
                     SSL_set_accept_state( ssl );
                     SSL_set_fd( ssl, infd );
                     
-                    ssl_.insert( std::pair<int, SSL*>(infd, ssl));                    
+                    ssl_.insert( std::pair<int, SSL*>(infd, ssl));
+                    
                     // callback, notify there is a new connection infd
                     if ( callback_ != NULL )
                     {
@@ -390,6 +415,14 @@ void octillion::CoreServer::core_task()
     
     server_fd_ = -1;
     is_running_ = false;
+    
+    for (const auto& data : ssl_) 
+    {
+        LOG_D(tag_) << "core_task, recycle ssl_, fd:" << data.first;
+        SSL_free( data.second );
+    }
+    
+    SSL_CTX_free( ctx );
     
     delete [] events;  
 
