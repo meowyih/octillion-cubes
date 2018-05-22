@@ -5,15 +5,31 @@
 #include <thread>
 #include <system_error>
 #include <map>
+#include <list>
+#include <cstdint>
 
 #include <openssl/ssl.h>
 
-#include "coreservercallback.h"
-
 namespace octillion
 {
+    class CoreServerCallback;
     class CoreServer;
 }
+
+// CoreServerCallback definition
+class octillion::CoreServerCallback
+{
+    public:
+        ~CoreServerCallback() {}
+        
+    public:
+        // pure virtual function that handlers all incoming event
+        virtual void connect( int fd ) = 0;
+        
+        // return 0 to close the fd due to invalid data
+        virtual int recv( int fd, uint8_t* data, size_t datasize) = 0;
+        virtual void disconnect( int fd ) = 0;
+};
 
 // CodeServer definition
 class octillion::CoreServer 
@@ -36,12 +52,9 @@ class octillion::CoreServer
         // raise the stop flag and wait until the server thread die
         std::error_code stop();
         
-        // send data via a socket fd
-        std::error_code senddata( int socketfd, const void *buf, size_t len );
-        
-        // send data via a socket fd
-        void closesocket( int socketfd );
-        
+        // send data via a fd
+        std::error_code senddata( int fd, const void *buf, size_t len, bool autoretry = true );
+
         // check if server thread is still running
         bool is_running() { return is_running_; }
         
@@ -50,7 +63,11 @@ class octillion::CoreServer
         
     private:
         CoreServer();
-        ~CoreServer();
+        ~CoreServer();        
+        
+        // send data via a socket fd, should be done in the core_task thread
+        // to prevent wrong usage, put it in private
+        void closesocket( int socketfd );
         
         void core_task();
         
@@ -58,7 +75,7 @@ class octillion::CoreServer
         std::error_code set_nonblocking( int fd );
 
     private: // SSL usage
-        std::map<int, SSL*> ssl_;        
+        std::map<int, SSL*> ssl_;
     
     private:
         // epoll timeout
@@ -72,18 +89,31 @@ class octillion::CoreServer
     public:                
         // avoid accidentally copy
         CoreServer( CoreServer const& ) = delete;
-        void operator = ( CoreServer const& ) = delete;        
+        void operator = ( CoreServer const& ) = delete;
 
-    
     private:
         std::string port_;
         int server_fd_;
         int epoll_fd_;
+        SSL* server_ssl_; // a pointer to ssl_ that can access server's ssl quicker
+                          // no need to SSL_free( server_ssl_ ) it directly
                 
         bool is_running_;
         bool core_thread_flag_;
         
         std::thread* core_thread_;
+        
+    private:
+        // retry SSL_write buffer
+        struct DataBuffer
+        {
+            int fd;
+            uint8_t* data;
+            size_t datalen;
+        };
+        
+        std::list<DataBuffer> list_;
+        pthread_mutex_t list_lock_;
     
     private:
         const int kEpollTimeout = 5 * 1000;

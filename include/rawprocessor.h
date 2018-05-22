@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <string>
 
-#include "coreservercallback.h"
+#include "coreserver.h"
 
 namespace octillion
 {
@@ -50,7 +50,7 @@ class octillion::RawProcessor : public octillion::CoreServerCallback
     public:
         // virtual function from CoreServerCallback that handlers all incoming events
         virtual void connect( int fd ) override;
-        virtual void recv( int fd, uint8_t* data, size_t datasize) override;
+        virtual int recv( int fd, uint8_t* data, size_t datasize) override;
         virtual void disconnect( int fd ) override;
         
     public:
@@ -60,8 +60,8 @@ class octillion::RawProcessor : public octillion::CoreServerCallback
         void encrypt( uint8_t* data, size_t datasize, uint8_t* key, size_t keysize );
         void decrypt( uint8_t* data, size_t datasize, uint8_t* key, size_t keysize );
 
-        size_t readheader( int fd, uint8_t* data, size_t datasize, size_t anchor );
-        size_t readdata( int fd, uint8_t* data, size_t datasize, size_t anchor );
+        ssize_t readheader( int fd, uint8_t* data, size_t datasize, size_t anchor );
+        ssize_t readdata( int fd, uint8_t* data, size_t datasize, size_t anchor );
 
     private:
         std::map<int, RawProcessorClient> clients_;

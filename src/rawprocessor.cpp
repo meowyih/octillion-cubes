@@ -76,11 +76,6 @@ std::error_code octillion::RawProcessor::senddata( int fd, uint8_t* data, size_t
     if ( error != OcError::E_SUCCESS )
     {
         LOG_E( tag_ ) << "senddata, failed to send data, fd:" << fd << " datasize:" << datasize << " error:" << error;
-        // close socket
-        CoreServer::get_instance().closesocket( fd );
-        
-        // notify itself
-        disconnect( fd );
     }
     else 
     {
@@ -89,19 +84,13 @@ std::error_code octillion::RawProcessor::senddata( int fd, uint8_t* data, size_t
         if ( error != OcError::E_SUCCESS )
         {
             LOG_E( tag_ ) << "senddata, failed to send data, fd:" << fd << " datasize:" << datasize << " error:" << error;
-            
-            // close socket
-            CoreServer::get_instance().closesocket( fd );
-            
-            // notify itself
-            disconnect( fd );
         }
     }
-
+    
     delete [] buffer;
 }
 
-size_t octillion::RawProcessor::readheader( int fd, uint8_t* data, size_t datasize, size_t anchor )
+ssize_t octillion::RawProcessor::readheader( int fd, uint8_t* data, size_t datasize, size_t anchor )
 {
     size_t read = 0;
     
@@ -140,10 +129,9 @@ size_t octillion::RawProcessor::readheader( int fd, uint8_t* data, size_t datasi
                 LOG_E(tag_) << "readheader fd:" << fd << " has bad datasize " << clients_[fd].datasize_;
                 
                 clients_[fd].headersize_ = 0;
-                CoreServer::get_instance().closesocket( fd );
-                
-                // no need to handle other data
-                return datasize + 1;
+
+                // error occurred
+                return -1;
             }
             else if ( clients_[fd].datasize_ == 0 )
             {
@@ -170,7 +158,7 @@ size_t octillion::RawProcessor::readheader( int fd, uint8_t* data, size_t datasi
     return read;
 }
 
-size_t octillion::RawProcessor::readdata( int fd, uint8_t* data, size_t datasize, size_t anchor )
+ssize_t octillion::RawProcessor::readdata( int fd, uint8_t* data, size_t datasize, size_t anchor )
 {
     size_t read = 0;
     size_t remain;
@@ -219,7 +207,7 @@ size_t octillion::RawProcessor::readdata( int fd, uint8_t* data, size_t datasize
         
         // read whole data, notify upper level and clean up 
         std::string str( (const char*)clients_[fd].data_, clients_[fd].datasize_ );     
-        LOG_D() << "RawProcessor::recv chunk size:" << clients_[fd].datasize_ << " data_:" << str;
+        LOG_D( tag_ ) << "RawProcessor::recv chunk size:" << clients_[fd].datasize_ << " data_:" << str;
             
         // TODO: notify the upper later
           
@@ -227,19 +215,30 @@ size_t octillion::RawProcessor::readdata( int fd, uint8_t* data, size_t datasize
         clients_.erase(fd);       
     }
     
+    LOG_D( tag_ ) << "RawProcessor::recv return " << read;
+    
     return read;
 }
 
-void octillion::RawProcessor::recv( int fd, uint8_t* data, size_t datasize )
+int octillion::RawProcessor::recv( int fd, uint8_t* data, size_t datasize )
 {
     size_t anchor = 0;
     size_t sendsize;
     
+    LOG_D( tag_ ) << "recv enter";
+    
     while ( anchor < datasize )
     {
-        size_t read;
+        ssize_t read;
         
         read = readheader( fd, data, datasize, anchor );
+        
+        if ( read < 0 )
+        {
+            // error, notify server to close fd
+            return 0;
+        }
+        
         anchor = anchor + read;
         
         if ( anchor >= datasize )
@@ -251,7 +250,7 @@ void octillion::RawProcessor::recv( int fd, uint8_t* data, size_t datasize )
         anchor = anchor + read;
     }
     
-    senddata( fd, (uint8_t*)"ok", (size_t)2 );
+    return 1;
 }
 
 void octillion::RawProcessor::disconnect( int fd )
@@ -265,6 +264,7 @@ void octillion::RawProcessor::disconnect( int fd )
     {
         LOG_D() << "RawProcessor::disconnect, fd:" << fd;
         clients_.erase( fd );
+        LOG_D( tag_ ) << "RawProcessor::disconnect, clients_.erase done";
     }
 }
 

@@ -4,7 +4,7 @@ CPPFLAGS = -O3 -ansi -std=c++11 -pthread -Iinclude -L/usr/local/lib -lssl -lcryp
 VPATH = src include
 
 OBJDIR = obj
-OBJS = $(addprefix $(OBJDIR)/, main.o ocerror.o coreserver.o rawprocessor.o )
+OBJS = $(addprefix $(OBJDIR)/, main.o ocerror.o coreserver.o rawprocessor.o coreserver_cb_sample.o )
 
 TARGET = exe
 
