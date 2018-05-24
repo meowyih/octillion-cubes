@@ -1,10 +1,22 @@
 
 CPP = g++
 CPPFLAGS = -O3 -ansi -std=c++11 -pthread -Iinclude -L/usr/local/lib -lssl -lcrypto
-VPATH = src include
+VPATH = include \
+        src/error \
+        src/server \
+        src/world
 
 OBJDIR = obj
-OBJS = $(addprefix $(OBJDIR)/, main.o ocerror.o coreserver.o rawprocessor.o coreserver_cb_sample.o )
+OBJS = $(addprefix $(OBJDIR)/, \
+       main.o \
+       ocerror.o \
+       coreserver.o \
+       rawprocessor.o \
+       coreserver_cb_sample.o \
+       cube.o \
+       player.o \
+       world.o \
+       )
 
 TARGET = exe
 

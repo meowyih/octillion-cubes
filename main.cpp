@@ -6,11 +6,12 @@
 
 #include <signal.h>
 
-#include "ocerror.h"
-#include "coreserver.h"
-#include "rawprocessor.h"
-#include "coreserver_cb_sample.h"
-#include "macrolog.h"
+#include "error/ocerror.hpp"
+#include "server/coreserver.hpp"
+#include "world/world.hpp"
+#include "server/rawprocessor.hpp"
+#include "server/coreserver_cb_sample.hpp"
+#include "error/macrolog.hpp"
 
 volatile sig_atomic_t flag = 0;
 
@@ -32,6 +33,7 @@ int main ()
     // don't forget to change iptables
     // iptables -A ufw-user-input -p tcp -m tcp --dport 8888 -j ACCEPT
     // iptables -A ufw-user-output -p tcp -m tcp --dport 8888 -j ACCEPT
+    octillion::World::get_instance();
     octillion::CoreServer::get_instance();
     
     octillion::RawProcessor* rawprocessor = new octillion::RawProcessor();
@@ -39,7 +41,7 @@ int main ()
     
     octillion::CoreServer::get_instance().set_callback( cscb );
     
-    err = octillion::CoreServer::get_instance().start( "8888" );
+    err = octillion::CoreServer::get_instance().start( "8888", "cert/cert.key", "cert/cert.pem" );
         
     if ( err != OcError::E_SUCCESS )
     {
