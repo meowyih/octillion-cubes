@@ -3,6 +3,7 @@
 #include <string>
 #include <system_error>
 #include <thread>
+#include <chrono>
 
 #include <signal.h>
 
@@ -39,7 +40,7 @@ int main ()
     octillion::RawProcessor* rawprocessor = new octillion::RawProcessor();
     octillion::CoreServerCbSample* cscb = new octillion::CoreServerCbSample();
     
-    octillion::CoreServer::get_instance().set_callback( cscb );
+    octillion::CoreServer::get_instance().set_callback( rawprocessor );
     
     err = octillion::CoreServer::get_instance().start( "8888", "cert/cert.key", "cert/cert.pem" );
         
@@ -50,8 +51,17 @@ int main ()
     }
     
     flag = 0;
+    uint64_t lastms = (std::chrono::duration_cast< std::chrono::milliseconds >(std::chrono::system_clock::now().time_since_epoch())).count();
     while( 1 )
     {
+        uint64_t nowms = (std::chrono::duration_cast< std::chrono::milliseconds >(std::chrono::system_clock::now().time_since_epoch())).count();
+        
+        if ( nowms - lastms > 1000 )
+        {
+            octillion::World::get_instance().tick(); 
+            lastms = nowms;
+        }
+        
         if ( flag == 1 )
         {
             break;

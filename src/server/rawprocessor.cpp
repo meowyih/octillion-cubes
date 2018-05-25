@@ -9,6 +9,9 @@
 #include "error/macrolog.hpp"
 #include "error/ocerror.hpp"
 
+#include "world/world.hpp"
+#include "world/command.hpp"
+
 octillion::RawProcessorClient::RawProcessorClient()
 {
     LOG_D(tag_) << "RawProcessorClient()";
@@ -16,6 +19,7 @@ octillion::RawProcessorClient::RawProcessorClient()
     keysize_ = 0;
     datasize_ = 0;
     dataanchor_ = 0;
+    fd_ = 0;
     data_ = NULL;
 }
 
@@ -49,42 +53,37 @@ void octillion::RawProcessor::connect( int fd )
     if ( clients_.find( fd ) != clients_.end() )
     {
         clients_.erase( fd );
+        World::get_instance().logout( fd );
     }
     
     clients_[fd].fd_ = fd;
+    World::get_instance().login( fd );
 }
 
 std::error_code octillion::RawProcessor::senddata( int fd, uint8_t* data, size_t datasize )
 {
-    uint32_t header = htonl( datasize );    
+    uint32_t header = htonl( datasize );
     uint8_t key[RawProcessorClient::kRawProcessorMaxKeyPoolSize];
     size_t keysize = (datasize % ( RawProcessorClient::kRawProcessorMaxKeyPoolSize - 1 )) + 1;
-    uint8_t* buffer = new uint8_t[datasize];
+    uint8_t* buffer = new uint8_t[sizeof(uint32_t) + datasize];
     std::error_code error;
-        
-    memcpy( (void*) buffer, (const void*) data, datasize );
+    
+    memcpy( (void*) buffer, (const void*)&header, sizeof(uint32_t));
+    memcpy( (void*) ( buffer + sizeof( uint32_t )), 
+            (const void*) data, datasize );
 
     for ( int i = 0; i < keysize; i ++ )
     {
         key[i] = kRawProcessorKeyPool[ (datasize + i) % kRawProcessorKeyPoolSize];
     }
     
-    encrypt( buffer, datasize, key, keysize );
+    encrypt( (uint8_t*)(buffer + sizeof( uint32_t )), datasize, key, keysize );
        
-    error = CoreServer::get_instance().senddata( fd, (const void*)&header, sizeof(uint32_t) );
-
+    error = CoreServer::get_instance().senddata( fd, (const void*)buffer, sizeof( uint32_t ) + datasize );
+    
     if ( error != OcError::E_SUCCESS )
     {
         LOG_E( tag_ ) << "senddata, failed to send data, fd:" << fd << " datasize:" << datasize << " error:" << error;
-    }
-    else 
-    {
-        error = CoreServer::get_instance().senddata( fd, (const void*)buffer, datasize );
-        
-        if ( error != OcError::E_SUCCESS )
-        {
-            LOG_E( tag_ ) << "senddata, failed to send data, fd:" << fd << " datasize:" << datasize << " error:" << error;
-        }
     }
     
     delete [] buffer;
@@ -104,7 +103,7 @@ ssize_t octillion::RawProcessor::readheader( int fd, uint8_t* data, size_t datas
         LOG_D(tag_) << "readheader, header is already there, skip reading";
         return read;        
     }
-        
+
     while(( anchor + read ) < datasize )
     {
         if ( clients_[fd].headersize_ < RawProcessorClient::kRawProcessorHeaderSize )
@@ -160,7 +159,7 @@ ssize_t octillion::RawProcessor::readheader( int fd, uint8_t* data, size_t datas
 
 ssize_t octillion::RawProcessor::readdata( int fd, uint8_t* data, size_t datasize, size_t anchor )
 {
-    size_t read = 0;
+    ssize_t read = 0;
     size_t remain;
     
     // calculate the remain space for clients_[fd].data_
@@ -204,15 +203,22 @@ ssize_t octillion::RawProcessor::readdata( int fd, uint8_t* data, size_t datasiz
         // decrypt the data
         decrypt( clients_[fd].data_, clients_[fd].datasize_,
             clients_[fd].key_, clients_[fd].keysize_ );
-        
-        // read whole data, notify upper level and clean up 
-        std::string str( (const char*)clients_[fd].data_, clients_[fd].datasize_ );     
-        LOG_D( tag_ ) << "RawProcessor::recv chunk size:" << clients_[fd].datasize_ << " data_:" << str;
             
-        // TODO: notify the upper later
+        // transfer data to Command and send to the World
+        Command* cmd = new Command( fd, clients_[fd].data_, clients_[fd].datasize_ );
+        if ( cmd->valid() )
+        {
+            LOG_D( tag_ ) << "add cmd to World";
+            World::get_instance().addcmd( fd, cmd );
+        }
+        else
+        {
+            delete cmd;
+            read = -1; // bad command, return -1 to close the connection
+        }
           
         // release resource          
-        clients_.erase(fd);       
+        clients_.erase(fd);
     }
     
     LOG_D( tag_ ) << "RawProcessor::recv return " << read;
@@ -247,6 +253,13 @@ int octillion::RawProcessor::recv( int fd, uint8_t* data, size_t datasize )
         }
         
         read = readdata( fd, data, datasize, anchor );
+        
+        if ( read < 0 )
+        {
+            // error, notify server to close fd
+            return 0;            
+        }
+        
         anchor = anchor + read;
     }
     
@@ -255,16 +268,17 @@ int octillion::RawProcessor::recv( int fd, uint8_t* data, size_t datasize )
 
 void octillion::RawProcessor::disconnect( int fd )
 {    
+    World::get_instance().logout( fd );
+    
     // check fd validation, only for safety
     if ( clients_.find( fd ) == clients_.end() )
     {
-        LOG_W() << "RawProcessor::disconnect, fd:" << fd << " does not exist";
+        LOG_D() << "RawProcessor::disconnect, fd:" << fd << " does not has data that need to be read";
     }
     else
     {
         LOG_D() << "RawProcessor::disconnect, fd:" << fd;
-        clients_.erase( fd );
-        LOG_D( tag_ ) << "RawProcessor::disconnect, clients_.erase done";
+        clients_.erase( fd );        
     }
 }
 

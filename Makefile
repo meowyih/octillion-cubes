@@ -4,7 +4,8 @@ CPPFLAGS = -O3 -ansi -std=c++11 -pthread -Iinclude -L/usr/local/lib -lssl -lcryp
 VPATH = include \
         src/error \
         src/server \
-        src/world
+        src/world \
+        src/database
 
 OBJDIR = obj
 OBJS = $(addprefix $(OBJDIR)/, \
@@ -15,7 +16,9 @@ OBJS = $(addprefix $(OBJDIR)/, \
        coreserver_cb_sample.o \
        cube.o \
        player.o \
+       command.o \
        world.o \
+       database.o \
        )
 
 TARGET = exe

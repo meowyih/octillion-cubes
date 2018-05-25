@@ -43,23 +43,29 @@ public:
     std::error_code logout(int pcid);
     std::error_code move(int pcid, const CubePosition& loc );
     std::error_code move( int pcid, CubePosition::Direction dir );
+    void addcmd(int fd, Command* cmd);
 
-public:
-    
+public:    
     virtual void tick() override;
     virtual void tickcallback(
         uint32_t type,
         uint32_t param1,
         uint32_t param2) override;
 private:
-    void addcmd(Command* cmd);
+
     std::mutex cmds_lock_;
-    std::map<uint32_t, Command*> cmds_;
+    std::map<int, Command*> cmds_; // fd and Command*
 
 private:
     std::map<CubePosition, Cube*> cubes_;
     std::map<uint32_t, Player*> pcs_;
 
+private:
+    struct Data
+    {
+        uint8_t* data;
+        size_t datasize;
+    };
 };
 
 #endif

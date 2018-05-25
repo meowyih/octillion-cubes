@@ -11,6 +11,16 @@
 
 #include <openssl/ssl.h>
 
+// note: differet way to handle SSL_ERROR_WANT_READ/SSL_ERROR_WANT_WRITE
+// 1. non-blocking SSL_read needs to read several times 
+//    until SSL_ERROR_WANT_READ/SSL_ERROR_WANT_WRITE
+// 2. SSL_write without set SSL_MODE_ENABLE_PARTIAL_WRITE by SSL_CTX_set_mode
+//    indicate only return success if whole data were sent. but if see 
+//    SSL_ERROR_WANT_READ/SSL_ERROR_WANT_WRITE we still need to retry due to 
+//    the conflict between SSL_read and SSL_write in CoreServer implementation, 
+//    we put the retry logic in the same thread of core_task. It will make sure
+//    won't have confliction in retry.
+
 namespace octillion
 {
     class CoreServerCallback;
@@ -20,6 +30,9 @@ namespace octillion
 // CoreServerCallback definition
 class octillion::CoreServerCallback
 {
+    private:
+        const std::string tag_ = "CoreServerCallback";
+        
     public:
         ~CoreServerCallback() {}
         

@@ -42,8 +42,20 @@ class octillion::RawProcessor : public octillion::CoreServerCallback
 {
     private:
         const std::string tag_ = "RawProcessor";
-        
+
+    // singleton
     public:
+        static RawProcessor& get_instance()
+        {
+            static RawProcessor instance;
+            return instance;
+        }
+
+        // avoid accidentally copy
+        RawProcessor( RawProcessor const& ) = delete;
+        void operator = ( RawProcessor const& ) = delete;
+        
+    private:
         RawProcessor();
         ~RawProcessor();
         

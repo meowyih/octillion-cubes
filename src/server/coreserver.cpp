@@ -198,6 +198,7 @@ std::error_code octillion::CoreServer::senddata( int fd, const void *buf, size_t
     
     if ( ret > 0 )
     {
+        LOG_E(tag_) << "senddata, SSL_write ret:" << ret << " E_SUCCESS";
         return OcError::E_SUCCESS;
     }
     else
@@ -249,7 +250,7 @@ std::error_code octillion::CoreServer::senddata( int fd, const void *buf, size_t
 
 void octillion::CoreServer::core_task()
 {
-    int ret;
+    int epollret, ret;
     struct epoll_event event;
     struct epoll_event* events;
     
@@ -295,11 +296,11 @@ void octillion::CoreServer::core_task()
     while( core_thread_flag_ )
     {
         LOG_D(tag_) << "core_task, epoll_wait() enter";
-        ret = epoll_wait( epoll_fd_, events, kEpollBufferSize, kEpollTimeout );
+        epollret = epoll_wait( epoll_fd_, events, kEpollBufferSize, kEpollTimeout );
         
-        LOG_D(tag_) << "core_task, epoll_wait() ret events: " << ret;
+        LOG_D(tag_) << "core_task, epoll_wait() ret events: " << epollret;
                 
-        if ( ret == -1 )
+        if ( epollret == -1 )
         {
             LOG_E(tag_) << "core_task, epoll_wait() returns -1, errno: " << errno << " message: " << strerror( errno );
             break;
@@ -338,15 +339,58 @@ void octillion::CoreServer::core_task()
             list_lock_.unlock();
         }
         
-        for ( int i = 0; i < ret; i ++ )
-        {
+        for ( int i = 0; i < epollret; i ++ )
+        {   
+            // debug purpose
+            LOG_D(tag_) << "epoll event " << i << "/" << epollret << " val:" << events[i].events;       
+            if ( events[i].events & EPOLLERR )
+            {
+                LOG_D(tag_) << "EPOLLERR fd:" << events[i].data.fd;
+            }
+            
+            if ( events[i].events & EPOLLHUP )
+            {
+                LOG_D(tag_) << "EPOLLHUP fd:" << events[i].data.fd;
+            }
+            
+            if ( events[i].events & EPOLLRDHUP )
+            {
+                LOG_D(tag_) << "EPOLLRDHUP fd:" << events[i].data.fd;
+            }
+            
+            if ( events[i].events & EPOLLIN )
+            {
+                LOG_D(tag_) << "EPOLLIN fd:" << events[i].data.fd;
+            }
+            
+            if ( events[i].events & EPOLLOUT )
+            {
+                LOG_D(tag_) << "EPOLLOUT fd:" << events[i].data.fd;
+            }
+            
+            if ( events[i].events & EPOLLPRI )
+            {
+                LOG_D(tag_) << "EPOLLPRI fd:" << events[i].data.fd;
+            }
+            
+            if ( events[i].events & EPOLLET )
+            {
+                LOG_D(tag_) << "EPOLLET fd:" << events[i].data.fd;
+            }
+            
+            if ( events[i].events & EPOLLONESHOT )
+            {
+                LOG_D(tag_) << "EPOLLONESHOT fd:" << events[i].data.fd;
+            }
+            
+            // handling each event
             if (( events[i].events & EPOLLERR ) ||
                 ( events[i].events & EPOLLHUP ) ||
                !(events[i].events & EPOLLIN)) 
             {
                 // error occurred, disconnect this fd
-                closesocket( events[i].data.fd );
-                
+                closesocket( events[i].data.fd ); 
+
                 LOG_D(tag_) << "core_task, close socket fd: " << events[i].data.fd;
                 continue;
             }
@@ -452,49 +496,61 @@ void octillion::CoreServer::core_task()
                 LOG_D(tag_) << "SSL established";
                 
                 char buf[512];
-                ret = SSL_read( ssl, buf, sizeof buf );
-                
-                if ( ret > 0 )
+                while( true )
                 {
-                    // we didn't set flag for partial read
-                    if ( callback_ != NULL )
-                    {
-                        if ( callback_->recv( events[i].data.fd, (uint8_t*)buf, (size_t)ret ) == 0 )
-                        {
-                            closesocket( events[i].data.fd );
-                            continue; // error occurred, close fd and stop readding
-                        }
-                    }                    
-                }
-                else
-                {
-                    int sslerror = SSL_get_error( ssl, ret );
+                    // SSL_read until no more data or error occurred                    
+                    ret = SSL_read( ssl, buf, sizeof buf );
                     
-                    switch( sslerror )
+                    if ( ret > 0 )
                     {
-                    case SSL_ERROR_WANT_READ:
-                    case SSL_ERROR_WANT_WRITE:
-                    case SSL_ERROR_WANT_CONNECT:
-                    case SSL_ERROR_WANT_ACCEPT:
-                    case SSL_ERROR_WANT_X509_LOOKUP:
-                        // errors that should retry again later
-                        LOG_W( tag_ ) << "SSL_read retry error, err:" << sslerror;
-                        continue;
+                        // we didn't set flag for partial read
+                        if ( callback_ != NULL )
+                        {
+                            if ( callback_->recv( events[i].data.fd, (uint8_t*)buf, (size_t)ret ) == 0 )
+                            {
+                                closesocket( events[i].data.fd );
+                                break;
+                            }
+                        }                    
+                    }
+                    else
+                    {
+                        int sslerror = SSL_get_error( ssl, ret );
                         
-                    case SSL_ERROR_SYSCALL:
-                    case SSL_ERROR_SSL:
-                        // errors that cannot retry
-                        LOG_E( tag_ ) << "SSL_read non-retry error, err:" << sslerror;
-                        closesocket( events[i].data.fd );
-                        continue;
+                        switch( sslerror )
+                        {
+                        case SSL_ERROR_WANT_READ:
+                        case SSL_ERROR_WANT_WRITE:
+                            // continue reading, there is more data
+                            LOG_D( tag_ ) << "SSL_read SSL_ERROR_WANT_READ/SSL_ERROR_WANT_WRITE, err:" << sslerror;
+                            break;
+                        case SSL_ERROR_WANT_CONNECT:
+                        case SSL_ERROR_WANT_ACCEPT:
+                        case SSL_ERROR_WANT_X509_LOOKUP:
+                            // errors that should retry again later
+                            LOG_W( tag_ ) << "SSL_read retry error, err:" << sslerror;
+                            break;
+                            
+                        case SSL_ERROR_SYSCALL:
+                        case SSL_ERROR_SSL:
+                            // errors that cannot retry
+                            LOG_E( tag_ ) << "SSL_read non-retry error, err:" << sslerror;
+                            closesocket( events[i].data.fd );
+                            break;
 
-                    default:
-                        // unknown error
-                        LOG_E( tag_ ) << "SSL_read unknown error, err:" << sslerror;
-                        closesocket( events[i].data.fd );
+                        default:
+                            // unknown error
+                            LOG_E( tag_ ) << "SSL_read unknown error, err:" << sslerror;
+                            closesocket( events[i].data.fd );
+                            break;
+                        }
+                        
                         break;
                     }
-                } // end of SSL_read block
+                } // end of SSL_read while-loop
+
+                LOG_D( tag_ ) << "end of SSL_read";
+                
             } // end of event if-else block
         } // end of events for-loop
     } // end of epoll_wait while loop
