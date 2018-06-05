@@ -3,6 +3,9 @@
 
 #include <cstdint>
 
+#include "error/ocerror.hpp"
+#include "world/player.hpp"
+
 namespace octillion
 {
     class Database;
@@ -10,28 +13,10 @@ namespace octillion
 
 class octillion::Database
 {
-// singleton
-public:
-    static Database& get_instance()
-    {
-        static Database instance;
-        return instance;
-    }
-
-public:                
-    // avoid accidentally copy
-    Database( Database const& ) = delete;
-    void operator = ( Database const& ) = delete;    
-
-public:
-    Database();
-    
-public:
-    uint32_t reservedpcid();
-    
-// for small amount test, we load all player into memory.
-private:
-    uint32_t reservedpcid_;
+public:  
+    virtual std::error_code load( uint32_t pcid, Player* player ) = 0;
+    virtual std::error_code save( Player* player ) = 0;
+    virtual uint32_t reservedpcid() = 0;
 };
 
 #endif

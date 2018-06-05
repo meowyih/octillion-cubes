@@ -33,10 +33,13 @@ namespace
             case OcError::E_SYS_SEND:
             case OcError::E_SYS_SEND_AGAIN:
             case OcError::E_SYS_SEND_PARTIAL:
-                return "call standard strerror( errno ) to get more information";
+                return "Call standard strerror( errno ) to get more information";
             
             case OcError::E_FATAL:
                 return "Fatal error";
+
+            case OcError::E_DB_NO_RECORD:
+                return "No such record in database";
                 
             default:
                 return "Unknown error";

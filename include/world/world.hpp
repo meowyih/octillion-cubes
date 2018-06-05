@@ -12,6 +12,9 @@
 #include "world/player.hpp"
 #include "world/command.hpp"
 
+#include "database/database.hpp"
+#include "database/filedatabase.hpp"
+
 namespace octillion
 {
     class World;
@@ -43,7 +46,7 @@ public:
     std::error_code logout(int pcid);
     std::error_code move(int pcid, const CubePosition& loc );
     std::error_code move( int pcid, CubePosition::Direction dir );
-    void addcmd(int fd, Command* cmd);
+    void addcmd(Command* cmd);
 
 public:    
     virtual void tick() override;
@@ -51,8 +54,19 @@ public:
         uint32_t type,
         uint32_t param1,
         uint32_t param2) override;
-private:
 
+private:
+    struct Data
+    {
+        uint8_t* data;
+        size_t datasize;
+    };
+
+    std::error_code cmdUnknown(Command *cmd, Data& data);
+    std::error_code cmdReservedPcid(Command *cmd, Data& data);
+    std::error_code cmdRollCharacter(Command *cmd, Data& data);
+
+private:
     std::mutex cmds_lock_;
     std::map<int, Command*> cmds_; // fd and Command*
 
@@ -61,11 +75,9 @@ private:
     std::map<uint32_t, Player*> pcs_;
 
 private:
-    struct Data
-    {
-        uint8_t* data;
-        size_t datasize;
-    };
+    FileDatabase database_ = FileDatabase(std::string("save"));
+
+
 };
 
 #endif

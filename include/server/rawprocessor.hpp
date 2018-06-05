@@ -9,7 +9,7 @@
 
 namespace octillion
 {
-    struct RawProcessorClient;
+    class RawProcessorClient;
     class RawProcessor;    
 }
 
@@ -42,20 +42,8 @@ class octillion::RawProcessor : public octillion::CoreServerCallback
 {
     private:
         const std::string tag_ = "RawProcessor";
-
-    // singleton
-    public:
-        static RawProcessor& get_instance()
-        {
-            static RawProcessor instance;
-            return instance;
-        }
-
-        // avoid accidentally copy
-        RawProcessor( RawProcessor const& ) = delete;
-        void operator = ( RawProcessor const& ) = delete;
         
-    private:
+    public:
         RawProcessor();
         ~RawProcessor();
         
@@ -72,8 +60,8 @@ class octillion::RawProcessor : public octillion::CoreServerCallback
         void encrypt( uint8_t* data, size_t datasize, uint8_t* key, size_t keysize );
         void decrypt( uint8_t* data, size_t datasize, uint8_t* key, size_t keysize );
 
-        ssize_t readheader( int fd, uint8_t* data, size_t datasize, size_t anchor );
-        ssize_t readdata( int fd, uint8_t* data, size_t datasize, size_t anchor );
+        size_t readheader( int fd, uint8_t* data, size_t datasize, size_t anchor );
+        size_t readdata( int fd, uint8_t* data, size_t datasize, size_t anchor );
 
     private:
         std::map<int, RawProcessorClient> clients_;

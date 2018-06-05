@@ -9,7 +9,12 @@
 #include <list>
 #include <cstdint>
 
+#ifdef WIN32
+// Currently no Win32 Implementation for coreserver
+using SSL = void;
+#else
 #include <openssl/ssl.h>
+#endif
 
 // note: differet way to handle SSL_ERROR_WANT_READ/SSL_ERROR_WANT_WRITE
 // 1. non-blocking SSL_read needs to read several times 

@@ -1,5 +1,7 @@
 #include <string>
 #include <iostream>
+#include <vector>
+#include <map>
 
 #include "error/ocerror.hpp"
 #include "error/macrolog.hpp"
@@ -7,12 +9,12 @@
 #include "world/world.hpp"
 #include "world/cube.hpp"
 
-#include "server/rawprocessor.hpp"
-
+#include "server/coreserver.hpp"
 #include "database/database.hpp"
 
 octillion::World::World()
 {
+    LOG_D(tag_) << "Constructor";
     Cube* cube0 = new Cube(CubePosition(), this);
 
     CubePosition loc1(1000, 1000, 1000);
@@ -67,7 +69,7 @@ octillion::World::World()
 
         std::cout << std::endl;
     }
-#endif    
+#endif
 }
 
 octillion::World::~World()
@@ -118,7 +120,6 @@ std::error_code octillion::World::logout(int pcid)
     }    
 }
 
-//TODO: rewrite this function
 std::error_code octillion::World::move(int pcid, const CubePosition & loc)
 {
     std::map<uint32_t, Player*>::iterator it = pcs_.find(pcid);
@@ -133,13 +134,13 @@ std::error_code octillion::World::move(int pcid, const CubePosition & loc)
         LOG_I(tag_) << "move, done";
         
         std::string locstr = CubePosition(loc).str();
-        // CoreServer::get_instance().senddata( pcid, locstr.c_str(), locstr.length() );
-        
+
+        CoreServer::get_instance().senddata( pcid, locstr.c_str(), locstr.length() );
+     
         return OcError::E_SUCCESS;        
     }
 }
 
-//TODO: rewrite this function
 std::error_code octillion::World::move( int pcid, CubePosition::Direction dir )
 {
     // get player
@@ -183,12 +184,7 @@ std::error_code octillion::World::move( int pcid, CubePosition::Direction dir )
 }
 
 void octillion::World::tick()
-{
-    uint8_t* buf = NULL;
-    size_t size;
-    uint32_t pcid;
-    int fd;
-    
+{    
     // data that need to send to pc after this tick
     std::map<int, Data> out;
 
@@ -197,53 +193,33 @@ void octillion::World::tick()
 
     for (auto& it : cmds_)
     {
-        fd = it.first;
+        int fd = it.first;
         Command* cmd = it.second;   
-        bool success = true; 
-        Data data;        
+        Data data;
+        std::error_code err;
         
         switch( cmd->cmd() )
         {
         case Command::RESERVED_PCID:
-            LOG_D( tag_ ) << "handle RESERVED_PCID in tick";
-            pcid = Database::get_instance().reservedpcid();
-            size = Command::format( NULL, 0, cmd->cmd(), pcid );
-            if ( size > 0 )
-            {
-                buf = new uint8_t[size];
-                Command::format( buf, size, cmd->cmd(), pcid );
-                data.data = buf;
-                data.datasize = size;
-                out[fd] = data;
-            }
-            else
-            {
-                // error handling
-                success = false;
-            }
+            err = cmdReservedPcid( cmd, data );
+            break;
+        case Command::ROLL_CHARACTER:
+            err = cmdRollCharacter( cmd, data );
             break;
         default: // undefined commands
-            success = false;
+            err = cmdUnknown(cmd, data);
             break;
         }
-        
-        // create an UNKNOWN command to player
-        if ( ! success )
+
+        if (err == OcError::E_SUCCESS)
         {
-            size = Command::format( NULL, 0, Command::UNKNOWN );
-            if ( size > 0 )
-            {
-                buf = new uint8_t[size];
-                Command::format( NULL, 0, Command::UNKNOWN );
-                data.data = buf;
-                data.datasize = size;
-                out[fd] = data;
-            }
-            else
-            {
-                // fatal error
-                LOG_E( tag_ ) << "failed to create error command for fd:" << fd << " cmd:" << cmd->cmd();
-            }
+            // insert data to output data map
+            out[fd] = data;
+        }
+        else
+        {
+            // fatal error, close fd
+            LOG_E(tag_) << "failed to handle incoming command cmd:" << cmd->cmd();
         }
     }
 
@@ -256,13 +232,13 @@ void octillion::World::tick()
     cmds_.clear();
     cmds_lock_.unlock();
 
-    // send data to each pc via RawProcessor
+    // send data to each pc via CoreServer
     for (auto& it : out)
     {
         uint32_t fd = it.first;
         Data data = it.second;
-        
-        RawProcessor::get_instance().senddata( fd, data.data, data.datasize );
+       
+        CoreServer::get_instance().senddata( fd, data.data, data.datasize );
 
         delete [] data.data;
     }
@@ -270,21 +246,100 @@ void octillion::World::tick()
     out.clear();
 }
 
+std::error_code octillion::World::cmdUnknown(Command *cmd, Data& data)
+{
+    size_t size;
+    uint8_t* buf;
+    std::vector<uint32_t> parms;
+
+    size = Command::format(NULL, 0, Command::UNKNOWN, parms);
+    if (size > 0)
+    {
+        buf = new uint8_t[size];
+        Command::format(buf, size, Command::UNKNOWN, parms);
+        data.data = buf;
+        data.datasize = size;
+        return OcError::E_SUCCESS;
+    }
+    else
+    {
+        // error handling
+        return OcError::E_FATAL;
+    }
+}
+std::error_code octillion::World::cmdReservedPcid(Command *cmd, Data& data)
+{
+    uint32_t pcid;
+    size_t size;
+    uint8_t* buf;
+    std::vector<uint32_t> parms;
+
+    pcid = database_.reservedpcid();
+    parms.push_back(pcid);
+    size = Command::format(NULL, 0, Command::RESERVED_PCID, parms);
+    if (size > 0)
+    {
+        buf = new uint8_t[size];
+        Command::format(buf, size, Command::RESERVED_PCID, parms);
+        data.data = buf;
+        data.datasize = size;
+        return OcError::E_SUCCESS;
+    }
+    else
+    {
+        // error handling
+        return OcError::E_FATAL;
+    }
+}
+
+std::error_code octillion::World::cmdRollCharacter(Command *cmd, Data& data)
+{
+    size_t size;
+    uint8_t* buf;
+    std::map<std::string, uint32_t> attrs;
+    std::vector<uint32_t> parms;
+    uint32_t gender = cmd->uint32parms_[0];
+    uint32_t cls = cmd->uint32parms_[1];
+
+    Player::roll(gender, cls, attrs);
+
+    parms.resize(4);
+    parms[0] = attrs["con"];
+    parms[1] = attrs["men"];
+    parms[2] = attrs["luc"];
+    parms[3] = attrs["cha"];
+
+    size = Command::format(NULL, 0, Command::ROLL_CHARACTER, parms);
+    if (size > 0)
+    {
+        buf = new uint8_t[size];
+        Command::format(buf, size, Command::ROLL_CHARACTER, parms);
+        data.data = buf;
+        data.datasize = size;
+        return OcError::E_SUCCESS;
+    }
+    else
+    {
+        // error handling
+        return OcError::E_FATAL;
+    }
+}
+
 void octillion::World::tickcallback(uint32_t type, uint32_t param1, uint32_t param2)
 {
 }
 
-void octillion::World::addcmd(int fd, Command * cmd)
+void octillion::World::addcmd(Command * cmd)
 {
     cmds_lock_.lock();
 
-    if (cmds_.find(fd) == cmds_.end())
+    if (cmds_.find(cmd->pcid_) == cmds_.end())
     {
-        cmds_[fd] = cmd;
+        // we only keep one cmd for each player in cmd queue during single tick
     }
     else
     {
-        LOG_W( tag_ ) << "warning: addcmd() found dulicate fd " << fd << " ignore it";
+        cmds_[cmd->pcid_] = cmd;
     }
 
     cmds_lock_.unlock();

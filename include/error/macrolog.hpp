@@ -80,8 +80,12 @@ class octillion::MacroLog
         {
             std::string loglevel("");
             std::time_t curtime = std::time(0);
-            std::tm* now = std::localtime( &curtime );
-            
+            std::tm now;
+#ifdef WIN32
+            localtime_s( &now, &curtime );
+#else
+            localtime_r(&curtime, &now);
+#endif
             switch ( level )
             {
                 case 1: loglevel = "e";  break;    
@@ -92,7 +96,7 @@ class octillion::MacroLog
             }
             
             
-            os_ << "[" << loglevel << " " << now->tm_hour << ":" << now->tm_min << ":" << now->tm_sec << "]"; 
+            os_ << "[" << loglevel << " " << now.tm_hour << ":" << now.tm_min << ":" << now.tm_sec << "]"; 
             
             if ( tag_.size() > 0 )
             {

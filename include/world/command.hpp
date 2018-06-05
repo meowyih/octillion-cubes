@@ -10,16 +10,18 @@
 // output - available pcid
 //
 // [roll]
-// input - pcid, nickname, password
-// output - users information
+// input - fd, gender, class 
+// output - attributes (con, men, luc, cha)
 //
 // [confirm roll result (complete pc creation)]
-// input - pcid
+// input - fd, nickname, password
 // output - user information, cubes
 // 
 // [login]
 // input - pcid, password
 // output - user information, cubes
+
+#include <vector>
 
 namespace octillion
 {
@@ -43,7 +45,6 @@ public:
     Command() {};
     Command( uint32_t pcid ) { pcid_ = pcid; valid_ = false; }
     Command( uint32_t pcid, uint32_t cmd ) { pcid_ = pcid; cmd_ = cmd; valid_ = false; }
-    Command( uint32_t pcid, uint32_t cmd, CubePosition loc ) { pcid_ = pcid; cmd_ = cmd; loc_ = loc; valid_ = false; }
     
     // set pcid to 0 if unknown
     Command( uint32_t pcid, uint8_t* data, size_t datasize );
@@ -52,12 +53,13 @@ public:
     bool valid() { return valid_; }
 
 public:  
-    static size_t format( uint8_t* buf, size_t buflen, uint32_t cmd, uint32_t argv = 0 );
+    static size_t format(uint8_t* buf, size_t buflen, uint32_t cmd, const std::vector<uint32_t>& uin32parms);
     
 public:
     uint32_t pcid_;
     uint32_t cmd_;
-    CubePosition loc_;
+
+    std::vector<uint32_t> uint32parms_;
     
 private:
     bool valid_;

@@ -18,7 +18,7 @@ OBJS = $(addprefix $(OBJDIR)/, \
        player.o \
        command.o \
        world.o \
-       database.o \
+       filedatabase.o \
        )
 
 TARGET = exe
@@ -46,3 +46,4 @@ $(OBJDIR)/%.o : %.cpp
 clean:
 	@rm -rf $(OBJDIR)
 	@rm -rf ${TARGET}
+	@rm -rf save

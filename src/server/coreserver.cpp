@@ -5,6 +5,9 @@
 #include <map>
 #include <mutex>
 
+#ifdef WIN32
+// Currently no Win32 Implementation for coreserver
+#else
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
@@ -17,10 +20,27 @@
 
 #include <openssl/ssl.h>
 #include <openssl/err.h>
+#endif
 
 #include "error/ocerror.hpp"
 #include "error/macrolog.hpp"
 #include "server/coreserver.hpp"
+
+#ifdef WIN32
+
+// Currently no Win32 Implementation for coreserver
+octillion::CoreServer::CoreServer() {};
+octillion::CoreServer::~CoreServer() {};
+std::error_code octillion::CoreServer::start(std::string port, std::string key, std::string cert) { return OcError::E_FATAL; }
+std::error_code octillion::CoreServer::stop() { return OcError::E_FATAL; }
+void octillion::CoreServer::closesocket(int fd) {}
+void octillion::CoreServer::core_task() {}
+std::error_code octillion::CoreServer::init_server_socket() { return OcError::E_FATAL; }
+std::error_code octillion::CoreServer::senddata(int fd, const void *buf, size_t len, bool autoretry) { return OcError::E_FATAL; }
+std::error_code octillion::CoreServer::set_nonblocking(int fd) { return OcError::E_FATAL; }
+
+#else // linux
+
 
 octillion::CoreServer::CoreServer()
 {   
@@ -193,12 +213,17 @@ std::error_code octillion::CoreServer::senddata( int fd, const void *buf, size_t
 
     SSL* ssl = it->second;
     
+    while( true )
+    {
+        // SSL_CTX partial data flag is disabled by default       
+        int ret = SSL_write( ssl, buf, len );
+    }
+    
     // SSL_CTX partial data flag is disabled by default
     int ret = SSL_write( ssl, buf, len );
     
     if ( ret > 0 )
     {
-        LOG_E(tag_) << "senddata, SSL_write ret:" << ret << " E_SUCCESS";
         return OcError::E_SUCCESS;
     }
     else
@@ -665,3 +690,5 @@ std::error_code octillion::CoreServer::set_nonblocking( int fd )
     
     return OcError::E_SUCCESS;
 }
+
+#endif // ifdef linux

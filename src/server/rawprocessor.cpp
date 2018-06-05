@@ -1,8 +1,13 @@
 #include <cstdint>
 #include <cstring>
 #include <map>
+#include <cstdint>
 
+#ifdef WIN32
+#include <Winsock2.h>
+#else
 #include <netinet/in.h>
+#endif
 
 #include "server/coreserver.hpp"
 #include "server/rawprocessor.hpp"
@@ -19,7 +24,6 @@ octillion::RawProcessorClient::RawProcessorClient()
     keysize_ = 0;
     datasize_ = 0;
     dataanchor_ = 0;
-    fd_ = 0;
     data_ = NULL;
 }
 
@@ -27,12 +31,12 @@ octillion::RawProcessorClient::~RawProcessorClient()
 {    
     if ( data_ != NULL )
     {
-        LOG_D() << "~RawProcessorClient(), fd_:" << fd_ << ", delete data_";        
+        LOG_D(tag_) << "~RawProcessorClient(), fd_:" << fd_ << ", delete data_";        
         delete [] data_;
     }
     else
     {
-        LOG_D() << "~RawProcessorClient(), fd_:" << fd_;
+        LOG_D(tag_) << "~RawProcessorClient(), fd_:" << fd_;
     }
 }
 
@@ -72,7 +76,7 @@ std::error_code octillion::RawProcessor::senddata( int fd, uint8_t* data, size_t
     memcpy( (void*) ( buffer + sizeof( uint32_t )), 
             (const void*) data, datasize );
 
-    for ( int i = 0; i < keysize; i ++ )
+    for ( size_t i = 0; i < keysize; i ++ )
     {
         key[i] = kRawProcessorKeyPool[ (datasize + i) % kRawProcessorKeyPoolSize];
     }
@@ -80,16 +84,18 @@ std::error_code octillion::RawProcessor::senddata( int fd, uint8_t* data, size_t
     encrypt( (uint8_t*)(buffer + sizeof( uint32_t )), datasize, key, keysize );
        
     error = CoreServer::get_instance().senddata( fd, (const void*)buffer, sizeof( uint32_t ) + datasize );
+
+    delete [] buffer;
     
     if ( error != OcError::E_SUCCESS )
     {
         LOG_E( tag_ ) << "senddata, failed to send data, fd:" << fd << " datasize:" << datasize << " error:" << error;
     }
-    
-    delete [] buffer;
+
+    return error;
 }
 
-ssize_t octillion::RawProcessor::readheader( int fd, uint8_t* data, size_t datasize, size_t anchor )
+size_t octillion::RawProcessor::readheader( int fd, uint8_t* data, size_t datasize, size_t anchor )
 {
     size_t read = 0;
     
@@ -141,7 +147,7 @@ ssize_t octillion::RawProcessor::readheader( int fd, uint8_t* data, size_t datas
             // generate the encrypt/decrypt key
             clients_[fd].keysize_ = 
                 ( clients_[fd].datasize_ % ( RawProcessorClient::kRawProcessorMaxKeyPoolSize - 1 )) + 1;     
-            for ( int i = 0; i < clients_[fd].keysize_; i ++ )
+            for ( size_t i = 0; i < clients_[fd].keysize_; i ++ )
             {
                 clients_[fd].key_[i] = kRawProcessorKeyPool[ (clients_[fd].datasize_ + i) % kRawProcessorKeyPoolSize];
             }
@@ -157,9 +163,9 @@ ssize_t octillion::RawProcessor::readheader( int fd, uint8_t* data, size_t datas
     return read;
 }
 
-ssize_t octillion::RawProcessor::readdata( int fd, uint8_t* data, size_t datasize, size_t anchor )
+size_t octillion::RawProcessor::readdata( int fd, uint8_t* data, size_t datasize, size_t anchor )
 {
-    ssize_t read = 0;
+    size_t read = 0;
     size_t remain;
     
     // calculate the remain space for clients_[fd].data_
@@ -208,8 +214,7 @@ ssize_t octillion::RawProcessor::readdata( int fd, uint8_t* data, size_t datasiz
         Command* cmd = new Command( fd, clients_[fd].data_, clients_[fd].datasize_ );
         if ( cmd->valid() )
         {
-            LOG_D( tag_ ) << "add cmd to World";
-            World::get_instance().addcmd( fd, cmd );
+            World::get_instance().addcmd( cmd );
         }
         else
         {
@@ -229,13 +234,12 @@ ssize_t octillion::RawProcessor::readdata( int fd, uint8_t* data, size_t datasiz
 int octillion::RawProcessor::recv( int fd, uint8_t* data, size_t datasize )
 {
     size_t anchor = 0;
-    size_t sendsize;
     
     LOG_D( tag_ ) << "recv enter";
     
     while ( anchor < datasize )
     {
-        ssize_t read;
+        size_t read;
         
         read = readheader( fd, data, datasize, anchor );
         
@@ -273,18 +277,18 @@ void octillion::RawProcessor::disconnect( int fd )
     // check fd validation, only for safety
     if ( clients_.find( fd ) == clients_.end() )
     {
-        LOG_D() << "RawProcessor::disconnect, fd:" << fd << " does not has data that need to be read";
+        LOG_D(tag_) << "RawProcessor::disconnect, fd:" << fd << " does not has data that need to be read";
     }
     else
     {
-        LOG_D() << "RawProcessor::disconnect, fd:" << fd;
+        LOG_D(tag_) << "RawProcessor::disconnect, fd:" << fd;
         clients_.erase( fd );        
     }
 }
 
 void octillion::RawProcessor::encrypt( uint8_t* data, size_t datasize, uint8_t* key, size_t keysize )
 {
-    for ( int i = 0; i < datasize; i ++ )
+    for ( size_t i = 0; i < datasize; i ++ )
     {
         data[i] = data[i] ^ key[i%keysize];
     }
@@ -292,7 +296,7 @@ void octillion::RawProcessor::encrypt( uint8_t* data, size_t datasize, uint8_t* 
 
 void octillion::RawProcessor::decrypt( uint8_t* data, size_t datasize, uint8_t* key, size_t keysize )
 {
-    for ( int i = 0; i < datasize; i ++ )
+    for ( size_t i = 0; i < datasize; i ++ )
     {
         data[i] = data[i] ^ key[i%keysize];
     }    

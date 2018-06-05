@@ -33,27 +33,27 @@ int octillion::CoreServerCbSample::recv( int fd, uint8_t* data, size_t datasize)
     {
     case 'N': World::get_instance().move( fd, CubePosition::NORTH ); 
         cmd = new Command( fd, 0 );
-        World::get_instance().addcmd( fd, cmd );
+        World::get_instance().addcmd( cmd );
         break;
     case 'E': World::get_instance().move( fd, CubePosition::EAST );
         cmd = new Command( fd, 0 );
-        World::get_instance().addcmd( fd, cmd );
+        World::get_instance().addcmd( cmd );
         break;
     case 'W': World::get_instance().move( fd, CubePosition::WEST ); 
         cmd = new Command( fd, 0 );
-        World::get_instance().addcmd( fd, cmd );
+        World::get_instance().addcmd( cmd );
         break;
     case 'S': World::get_instance().move( fd, CubePosition::SOUTH );
         cmd = new Command( fd, 0 );
-        World::get_instance().addcmd( fd, cmd );
+        World::get_instance().addcmd( cmd );
         break;
     case 'U': World::get_instance().move( fd, CubePosition::UP ); 
         cmd = new Command( fd, 0 );
-        World::get_instance().addcmd( fd, cmd );
+        World::get_instance().addcmd( cmd );
         break;
     case 'D': World::get_instance().move( fd, CubePosition::DOWN ); 
         cmd = new Command( fd, 0 );
-        World::get_instance().addcmd( fd, cmd );
+        World::get_instance().addcmd( cmd );
         break;
     }
     
