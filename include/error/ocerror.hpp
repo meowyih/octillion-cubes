@@ -22,6 +22,7 @@ enum class OcError
     E_SYS_SEND = 100,
 
     E_DB_NO_RECORD = 200,
+    E_DB_DUPLICATE_USERNAME = 201,
     
     E_FATAL = 999,    
 };

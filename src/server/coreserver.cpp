@@ -213,12 +213,6 @@ std::error_code octillion::CoreServer::senddata( int fd, const void *buf, size_t
 
     SSL* ssl = it->second;
     
-    while( true )
-    {
-        // SSL_CTX partial data flag is disabled by default       
-        int ret = SSL_write( ssl, buf, len );
-    }
-    
     // SSL_CTX partial data flag is disabled by default
     int ret = SSL_write( ssl, buf, len );
     
@@ -329,6 +323,22 @@ void octillion::CoreServer::core_task()
         {
             LOG_E(tag_) << "core_task, epoll_wait() returns -1, errno: " << errno << " message: " << strerror( errno );
             break;
+        }
+
+        // check if waiting list has fd need to be closed
+        if (badfds_.size() > 0)
+        {
+            badfds_lock_.lock();
+
+            for (auto it = badfds_.begin(); it != badfds_.end(); )
+            {
+                closesocket(*it);
+                ++it;
+            }
+
+            badfds_.clear();
+
+            badfds_lock_.unlock();
         }
         
         // check if waiting list has data need to be re-send
@@ -531,8 +541,9 @@ void octillion::CoreServer::core_task()
                         // we didn't set flag for partial read
                         if ( callback_ != NULL )
                         {
-                            if ( callback_->recv( events[i].data.fd, (uint8_t*)buf, (size_t)ret ) == 0 )
+                            if ( callback_->recv( events[i].data.fd, (uint8_t*)buf, (size_t)ret ) <= 0 )
                             {
+                                LOG_I(tag_) << "recv fd: " << events[i].data.fd << " failed, closed it.";
                                 closesocket( events[i].data.fd );
                                 break;
                             }
@@ -692,3 +703,14 @@ std::error_code octillion::CoreServer::set_nonblocking( int fd )
 }
 
 #endif // ifdef linux
+
+std::error_code octillion::CoreServer::requestclosefd(int fd)
+{
+    LOG_D(tag_) << "requestclosefd fd:" << fd;
+
+    badfds_lock_.lock();
+    badfds_.push_back(fd);
+    badfds_lock_.unlock();
+
+    return OcError::E_SUCCESS;
+}

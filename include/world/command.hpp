@@ -13,6 +13,10 @@
 // input - fd, gender, class 
 // output - attributes (con, men, luc, cha)
 //
+// [roll name]
+// input - fd
+// output - ascii name
+//
 // [confirm roll result (complete pc creation)]
 // input - fd, nickname, password
 // output - user information, cubes
@@ -22,6 +26,8 @@
 // output - user information, cubes
 
 #include <vector>
+
+#include "jsonw/jsonw.hpp"
 
 namespace octillion
 {
@@ -35,33 +41,38 @@ private:
     
 public:
     // login
-    const static uint32_t UNKNOWN = 0;
-    const static uint32_t RESERVED_PCID = 10;
-    const static uint32_t ROLL_CHARACTER = 11;
-    const static uint32_t CONFIRM_CHARACTER = 12;
-    const static uint32_t LOGIN = 13;
-        
+    const static int UNKNOWN = 0;
+    const static int VALIDATE_USERNAME = 13;
+    const static int CONFIRM_USER = 17;
+    const static int LOGIN = 19;
+
 public:
-    Command() {};
-    Command( uint32_t pcid ) { pcid_ = pcid; valid_ = false; }
-    Command( uint32_t pcid, uint32_t cmd ) { pcid_ = pcid; cmd_ = cmd; valid_ = false; }
-    
+    // command error
+    const static int E_CMD_SUCCESS = 0;
+    const static int E_CMD_UNKNOWN_COMMAND = 100;
+    const static int E_CMD_BAD_FORMAT = 101;
+    const static int E_CMD_TOO_COMMON_NAME = 102;
+        
+public:  
     // set pcid to 0 if unknown
-    Command( uint32_t pcid, uint8_t* data, size_t datasize );
+    Command( uint32_t fd, uint8_t* data, size_t datasize );
+
+    //destructor
+    ~Command();
     
     uint32_t cmd() { return cmd_; }
     bool valid() { return valid_; }
-
-public:  
-    static size_t format(uint8_t* buf, size_t buflen, uint32_t cmd, const std::vector<uint32_t>& uin32parms);
-    
-public:
-    uint32_t pcid_;
-    uint32_t cmd_;
-
-    std::vector<uint32_t> uint32parms_;
     
 private:
+    uint32_t fd_;
+    uint32_t cmd_;
+    
+    JsonTextW* json_ = NULL;
+
+public:
+    std::vector<std::string> strparms_;
+    std::vector<int> uiparms_;
+
     bool valid_;
 };
 

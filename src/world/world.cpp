@@ -9,12 +9,18 @@
 #include "world/world.hpp"
 #include "world/cube.hpp"
 
-#include "server/coreserver.hpp"
+#include "server/rawprocessor.hpp"
 #include "database/database.hpp"
+
+#include "jsonw/jsonw.hpp"
 
 octillion::World::World()
 {
     LOG_D(tag_) << "Constructor";
+
+    // init database
+    database_.init(std::string("save"));
+
     Cube* cube0 = new Cube(CubePosition(), this);
 
     CubePosition loc1(1000, 1000, 1000);
@@ -74,13 +80,15 @@ octillion::World::World()
 
 octillion::World::~World()
 {
+    LOG_D(tag_) << "Destructor";
     for (auto& it : cubes_)
     {
         delete it.second;
     }
 
-    for (auto& it : pcs_)
+    for (auto& it : players_)
     {
+        database_.save(it.second);
         delete it.second;
     }
 
@@ -90,38 +98,57 @@ octillion::World::~World()
     }
 }
 
-std::error_code octillion::World::login(int pcid)
+std::error_code octillion::World::connect(int fd)
 {
-    if (pcs_.find(pcid) != pcs_.end())
+    auto it = players_.find( fd );
+    
+    if ( it == players_.end())
     {
-        return OcError::E_FATAL;
-    }
-
-    Player* pc = new Player(pcid);
-    pc->move(CubePosition(1000, 1000, 1000));
-    pcs_[pcid] = pc;
-
-    return OcError::E_SUCCESS;
-}
-
-std::error_code octillion::World::logout(int pcid)
-{
-    std::map<uint32_t, Player*>::iterator it = pcs_.find(pcid);
-    if ( it == pcs_.end())
-    {
-        return OcError::E_FATAL;
+        LOG_D( tag_ ) << "connect() fd:" << fd;
+        players_[fd] = NULL;
+        return OcError::E_SUCCESS;
     }
     else
     {
-        delete it->second;
-        pcs_.erase(pcid);
+        // something bad happens in TCP layer, same fd connect twice
+        LOG_W( tag_ ) << "connect() has detect duplicate fd " << fd;
+        return OcError::E_FATAL;
+    }
+}
 
+std::error_code octillion::World::disconnect(int fd)
+{
+    auto it = players_.find( fd );
+    
+    if ( it == players_.end())
+    {
+        LOG_W( tag_ ) << "disconnect() fd:" << fd << " does not exist in players_";
+        return OcError::E_FATAL;
+    }
+    
+    Player* player = it->second;
+    
+    if ( player == NULL )
+    {
+        players_.erase( it );
+        LOG_I( tag_ ) << "disconnect() fd:" << fd << " has no login record";
         return OcError::E_SUCCESS;
-    }    
+    }
+    else 
+    {
+    
+        LOG_I( tag_ ) << "disconnect() fd:" << fd << " save data";
+        database_.save( player );
+        delete player;
+        players_.erase( it );
+        
+        return OcError::E_SUCCESS;
+    }
 }
 
 std::error_code octillion::World::move(int pcid, const CubePosition & loc)
 {
+    /*
     std::map<uint32_t, Player*>::iterator it = pcs_.find(pcid);
     if ( it == pcs_.end())
     {
@@ -135,14 +162,18 @@ std::error_code octillion::World::move(int pcid, const CubePosition & loc)
         
         std::string locstr = CubePosition(loc).str();
 
-        CoreServer::get_instance().senddata( pcid, locstr.c_str(), locstr.length() );
+        RawProcessor::senddata( pcid, (uint8_t*)locstr.c_str(), locstr.length());
      
         return OcError::E_SUCCESS;        
     }
+    */
+    
+    return OcError::E_SUCCESS;        
 }
 
 std::error_code octillion::World::move( int pcid, CubePosition::Direction dir )
 {
+    /*
     // get player
     Player* pc;
     std::map<uint32_t, Player*>::iterator pcsit = pcs_.find(pcid);
@@ -180,13 +211,17 @@ std::error_code octillion::World::move( int pcid, CubePosition::Direction dir )
     else
     {
         return move( pcid, dest );
-    }    
+    } 
+*/
+    return OcError::E_SUCCESS;        
 }
 
 void octillion::World::tick()
 {    
     // data that need to send to pc after this tick
-    std::map<int, Data> out;
+    std::map<int, JsonObjectW*> cmdbacks;
+    
+    LOG_D(tag_) << "tick, cmds_.size:" << cmds_.size();
 
     // handle commands in cmds_
     cmds_lock_.lock();
@@ -194,36 +229,44 @@ void octillion::World::tick()
     for (auto& it : cmds_)
     {
         int fd = it.first;
-        Command* cmd = it.second;   
-        Data data;
-        std::error_code err;
-        
-        switch( cmd->cmd() )
+        Command* cmd = it.second;
+        std::error_code err = OcError::E_SUCCESS;
+        JsonObjectW* cmdback = new JsonObjectW();
+
+        if (cmd == NULL || !cmd->valid())
         {
-        case Command::RESERVED_PCID:
-            err = cmdReservedPcid( cmd, data );
-            break;
-        case Command::ROLL_CHARACTER:
-            err = cmdRollCharacter( cmd, data );
-            break;
-        default: // undefined commands
-            err = cmdUnknown(cmd, data);
-            break;
+            cmdback->add(u8"err", Command::E_CMD_BAD_FORMAT);
+        }
+        else // valid cmd
+        {
+            switch (cmd->cmd())
+            {
+            case Command::VALIDATE_USERNAME:
+                err = cmdValidateUsername(fd, cmd, cmdback);
+                break;
+            case Command::CONFIRM_USER:
+                err = cmdConfirmUser(fd, cmd, cmdback);
+                break;
+            default: // undefined commands
+                err = cmdUnknown(fd, cmd, cmdback);
+                break;
+            }
         }
 
         if (err == OcError::E_SUCCESS)
         {
             // insert data to output data map
-            out[fd] = data;
+            cmdbacks[fd] = cmdback;
         }
         else
         {
             // fatal error, close fd
+            RawProcessor::closefd(fd);
             LOG_E(tag_) << "failed to handle incoming command cmd:" << cmd->cmd();
         }
     }
 
-    // clear cmds_
+    // all cmd were transfer to cmdbacks, clear cmds_
     for (auto& it : cmds_)
     {
         delete it.second;
@@ -232,114 +275,146 @@ void octillion::World::tick()
     cmds_.clear();
     cmds_lock_.unlock();
 
-    // send data to each pc via CoreServer
-    for (auto& it : out)
+    // send data to each pc via RawProcessor to CoreClient
+    for (auto& it : cmdbacks)
     {
         uint32_t fd = it.first;
-        Data data = it.second;
-       
-        CoreServer::get_instance().senddata( fd, data.data, data.datasize );
+        JsonObjectW* cmdback = it.second;
+        JsonObjectW* containerobj = new JsonObjectW();
+        containerobj->add(u8"cmd", cmdback);
+        JsonTextW* jsontext = new JsonTextW(containerobj);
+        std::string utf8 = jsontext->string();
 
-        delete [] data.data;
+        RawProcessor::senddata(fd, (uint8_t*)utf8.data(), utf8.size() );
+
+        delete jsontext;
+    }
+
+    LOG_D(tag_) << "tick, leave";
+}
+
+std::error_code octillion::World::cmdUnknown(int fd, Command *cmd, JsonObjectW* jsonobject)
+{
+    LOG_D(tag_) << "cmdUnknown";
+    jsonobject->add(u8"err", Command::E_CMD_UNKNOWN_COMMAND );
+    return OcError::E_SUCCESS;
+}
+
+std::error_code octillion::World::cmdValidateUsername(int fd, Command *cmd, JsonObjectW* jsonobject)
+{
+    LOG_D(tag_) << "cmdValidateUsername";
+    std::string username, validname;
+    std::error_code err;
+
+    auto it = players_.find(fd);
+
+    if (it == players_.end())
+    {
+        LOG_E(tag_) << "cmdValidateUsername() fd:" << fd << " does not exist in players_";
+        return OcError::E_FATAL;
+    }
+
+    Player* player = it->second;
+
+    if (player != NULL)
+    {
+        LOG_E(tag_) << "cmdValidateUsername() fd:" << fd << " has player data.";
+        return OcError::E_FATAL;
+    }
+
+    username = cmd->strparms_[0];
+
+    err = database_.reserve(fd, username);
+
+    if (err == OcError::E_SUCCESS && username.length() > 6 )
+    {
+        // valid username
+        validname = username;
+    }
+    else
+    {
+        // invalid username, provide alternative name
+        int appendix = 100;
+        std::string altname;
+        do
+        {
+            if (username.length() < 6)
+            {
+                altname = username + username + username + std::to_string(appendix);
+            }
+            else
+            {
+                altname = username + std::to_string(appendix);
+            }            
+            appendix++;
+            err = database_.reserve(fd, altname);
+
+            // don't want to wast time in this
+            if (appendix > 999)
+            {
+                jsonobject->add(u8"cmd", Command::VALIDATE_USERNAME);
+                jsonobject->add(u8"err", Command::E_CMD_TOO_COMMON_NAME);
+                return OcError::E_SUCCESS;
+            }
+
+        } while (err != OcError::E_SUCCESS);
+
+        validname = altname;
+    }
+
+    jsonobject->add(u8"cmd", Command::VALIDATE_USERNAME);
+    jsonobject->add(u8"err", Command::E_CMD_SUCCESS);
+    jsonobject->add(u8"s1", validname);
+
+    return OcError::E_SUCCESS;
+}
+
+std::error_code octillion::World::cmdConfirmUser(int fd, Command *cmd, JsonObjectW* jsonobject)
+{
+    std::error_code err;
+    std::string username = cmd->strparms_[0];
+    std::string password = cmd->strparms_[1];
+    int gender = cmd->uiparms_[0];
+    int cls = cmd->uiparms_[1];
+
+    Player* player = new Player();
+
+    player->username(username);
+    player->password( database_.hashpassword(password) );
+    player->gender(gender);
+    player->cls(cls);
+
+    err = database_.create(fd, player);
+
+    if (err == OcError::E_SUCCESS)
+    {
+        jsonobject->add(u8"cmd", Command::CONFIRM_USER);
+        jsonobject->add(u8"err", Command::E_CMD_SUCCESS);
+    }
+    else
+    {
+        LOG_E(tag_) << "cmdConfirmUser, failed to create player, err:" << err;
     }
     
-    out.clear();
-}
-
-std::error_code octillion::World::cmdUnknown(Command *cmd, Data& data)
-{
-    size_t size;
-    uint8_t* buf;
-    std::vector<uint32_t> parms;
-
-    size = Command::format(NULL, 0, Command::UNKNOWN, parms);
-    if (size > 0)
-    {
-        buf = new uint8_t[size];
-        Command::format(buf, size, Command::UNKNOWN, parms);
-        data.data = buf;
-        data.datasize = size;
-        return OcError::E_SUCCESS;
-    }
-    else
-    {
-        // error handling
-        return OcError::E_FATAL;
-    }
-}
-std::error_code octillion::World::cmdReservedPcid(Command *cmd, Data& data)
-{
-    uint32_t pcid;
-    size_t size;
-    uint8_t* buf;
-    std::vector<uint32_t> parms;
-
-    pcid = database_.reservedpcid();
-    parms.push_back(pcid);
-    size = Command::format(NULL, 0, Command::RESERVED_PCID, parms);
-    if (size > 0)
-    {
-        buf = new uint8_t[size];
-        Command::format(buf, size, Command::RESERVED_PCID, parms);
-        data.data = buf;
-        data.datasize = size;
-        return OcError::E_SUCCESS;
-    }
-    else
-    {
-        // error handling
-        return OcError::E_FATAL;
-    }
-}
-
-std::error_code octillion::World::cmdRollCharacter(Command *cmd, Data& data)
-{
-    size_t size;
-    uint8_t* buf;
-    std::map<std::string, uint32_t> attrs;
-    std::vector<uint32_t> parms;
-    uint32_t gender = cmd->uint32parms_[0];
-    uint32_t cls = cmd->uint32parms_[1];
-
-    Player::roll(gender, cls, attrs);
-
-    parms.resize(4);
-    parms[0] = attrs["con"];
-    parms[1] = attrs["men"];
-    parms[2] = attrs["luc"];
-    parms[3] = attrs["cha"];
-
-    size = Command::format(NULL, 0, Command::ROLL_CHARACTER, parms);
-    if (size > 0)
-    {
-        buf = new uint8_t[size];
-        Command::format(buf, size, Command::ROLL_CHARACTER, parms);
-        data.data = buf;
-        data.datasize = size;
-        return OcError::E_SUCCESS;
-    }
-    else
-    {
-        // error handling
-        return OcError::E_FATAL;
-    }
+    return err;
 }
 
 void octillion::World::tickcallback(uint32_t type, uint32_t param1, uint32_t param2)
 {
 }
 
-void octillion::World::addcmd(Command * cmd)
+void octillion::World::addcmd(int fd, Command * cmd)
 {
     cmds_lock_.lock();
 
-    if (cmds_.find(cmd->pcid_) == cmds_.end())
+    if (cmds_.find(fd) == cmds_.end())
     {
         // we only keep one cmd for each player in cmd queue during single tick
+        cmds_[fd] = cmd;
     }
     else
     {
-        cmds_[cmd->pcid_] = cmd;
+        LOG_W(tag_) << "duplicate cmd for fd: " << fd;
     }
 
     cmds_lock_.unlock();

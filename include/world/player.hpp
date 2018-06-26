@@ -44,8 +44,11 @@ public:
 public:
     // help static function to roll a player attribute based on gender and cls
     static void roll(uint32_t gender, uint32_t cls, std::map<std::string, uint32_t>& attribute);
+    static std::string rollname();
 
 public:
+    std::string username() { return username_; }
+    std::string password() { return password_; }
     uint32_t status() { return status_; }
     uint32_t id() { return id_; }
     uint32_t cls() { return cls_; }
@@ -55,6 +58,8 @@ public:
     uint32_t luc() { return luc_; }
     uint32_t cha() { return cha_; }
 
+    void username(std::string username) { username_ = username; }
+    void password(std::string password) { password_ = password; }
     void status(uint32_t status) { status_ = status; }
     void id(uint32_t id) { id_ = id; }
     void cls(uint32_t cls) { cls_ = cls; }
@@ -69,6 +74,8 @@ public:
     // advantage
     friend std::ostream& operator<< (std::ostream& os, const Player& player)
     {
+        os << "username(" << player.username_ << ")";
+        os << "password(" << player.password_ << ")";
         os << "id(" << player.id_ << ")";
         os << "cls(" << player.cls_ << ")";
         os << "gender(" << player.gender_ << ")";
@@ -83,6 +90,8 @@ public:
     CubePosition position() { return loc_; }
 
 private:
+    std::string username_;
+    std::string password_;
     uint32_t status_;
     uint32_t id_;
     uint32_t cls_;

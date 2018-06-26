@@ -40,6 +40,9 @@ namespace
 
             case OcError::E_DB_NO_RECORD:
                 return "No such record in database";
+
+            case OcError::E_DB_DUPLICATE_USERNAME:
+                return "Username already exist in database";
                 
             default:
                 return "Unknown error";

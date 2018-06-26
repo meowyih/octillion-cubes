@@ -15,6 +15,8 @@
 #include "database/database.hpp"
 #include "database/filedatabase.hpp"
 
+#include "jsonw/jsonw.hpp"
+
 namespace octillion
 {
     class World;
@@ -42,11 +44,11 @@ private:
     ~World();
 
 public:
-    std::error_code login(int pcid);
-    std::error_code logout(int pcid);
+    std::error_code connect(int fd);
+    std::error_code disconnect(int fd);
     std::error_code move(int pcid, const CubePosition& loc );
     std::error_code move( int pcid, CubePosition::Direction dir );
-    void addcmd(Command* cmd);
+    void addcmd(int fd, Command* cmd);
 
 public:    
     virtual void tick() override;
@@ -56,15 +58,9 @@ public:
         uint32_t param2) override;
 
 private:
-    struct Data
-    {
-        uint8_t* data;
-        size_t datasize;
-    };
-
-    std::error_code cmdUnknown(Command *cmd, Data& data);
-    std::error_code cmdReservedPcid(Command *cmd, Data& data);
-    std::error_code cmdRollCharacter(Command *cmd, Data& data);
+    std::error_code cmdUnknown(int fd, Command *cmd, JsonObjectW* jsonobject);
+    std::error_code cmdValidateUsername(int fd, Command *cmd, JsonObjectW* jsonobject);
+    std::error_code cmdConfirmUser(int fd, Command* cmd, JsonObjectW* jsonobject);
 
 private:
     std::mutex cmds_lock_;
@@ -72,12 +68,10 @@ private:
 
 private:
     std::map<CubePosition, Cube*> cubes_;
-    std::map<uint32_t, Player*> pcs_;
+    std::map<int, Player*> players_;    
 
 private:
-    FileDatabase database_ = FileDatabase(std::string("save"));
-
-
+    FileDatabase database_;
 };
 
 #endif

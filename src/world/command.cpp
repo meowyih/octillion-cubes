@@ -12,99 +12,160 @@
 #include "error/macrolog.hpp"
 #include "world/command.hpp"
 #include "database/database.hpp"
+#include "jsonw/jsonw.hpp"
 
-octillion::Command::Command( uint32_t pcid, uint8_t* data, size_t datasize )
+octillion::Command::Command( uint32_t fd, uint8_t* data, size_t datasize )
 {
     uint8_t* buf = data;
     size_t minsize = sizeof(uint32_t); // data should at least have 1 cmd
-    uint32_t uint32parm;
-    
+    size_t remaindata = datasize;
+    int uiparm;
+    std::string strparm;
+    JsonValueW* jsonvalue;
+
     LOG_D( tag_ ) << "constructor, datasize:" << datasize;
-    pcid_ = pcid;
+    fd_ = fd;
     valid_ = false;
     cmd_ = UNKNOWN;
 
-    switch (cmd_)
+    json_ = new JsonTextW((const char*)data, datasize);
+
+    // valid command must be a valid json text
+    if (!json_->valid())
     {
-    case RESERVED_PCID: // cmd
-        minsize = sizeof(uint32_t);
-        break;
-    case ROLL_CHARACTER: // cmd, class, gender
-        minsize = sizeof(uint32_t) + 2 * sizeof(uint32_t);
-        break;
-    }
-    
-    // minimum command requires uint32_t data at the beginning
-    if ( datasize < minsize)
-    {
-        LOG_E( tag_ ) << "constructor, size too small";
+        LOG_E(tag_) << "cons, json invalid";
         return;
     }
-    
-    memcpy( (void*)&cmd_, (const void*)buf, sizeof( uint32_t ));
-    buf = buf + sizeof(uint32_t);
-    cmd_ = ntohl( cmd_ );
+
+    // valid command must contains one and only one json object
+    if (json_->value()->type() != JsonValueW::Type::JsonObject)
+    {
+        LOG_E(tag_) << "cons, json is no an object: " << json_->string();
+        return;
+    }
+
+    // valid command must contains "cmd" name-value pair as integer
+    JsonObjectW* object = json_->value()->object();
+    jsonvalue = object->find(u8"cmd");
+    if ( jsonvalue == NULL || jsonvalue->type() != JsonValueW::Type::NumberInt )
+    {
+        LOG_E(tag_) << "cons, json's object has no cmd: " << json_->string();
+        return;
+    }
+
+    cmd_ = jsonvalue->integer();
     
     switch( cmd_ )
     {
-    case RESERVED_PCID: 
-        return; // no more data
-    case ROLL_CHARACTER:
+    case VALIDATE_USERNAME:
+        jsonvalue = object->find(u8"s1");
+        if (jsonvalue == NULL || jsonvalue->type() != JsonValueW::Type::String)
+        {
+            LOG_E(tag_) << "cons, cmd VALIDATE_USERNAME has no s1" << json_->string();
+            return;
+        }
 
-        memcpy((void*)&uint32parm, (const void*)buf, sizeof(uint32_t)); // 1st parm
-        uint32parms_.push_back(uint32parm);
-        buf = buf + sizeof(uint32_t);
+        strparm = jsonvalue->string();
 
-        memcpy((void*)&uint32parm, (const void*)buf, sizeof(uint32_t)); // 2nd parm
-        uint32parms_.push_back(uint32parm);
-        buf = buf + sizeof(uint32_t);
+        if (strparm.length() < 5 )
+        {
+            LOG_E(tag_) << "cons, cmd VALIDATE_USERNAME contains str that too short" << json_->string();
+            return;
+        }
 
+        strparms_.push_back(jsonvalue->string());
+        valid_ = true;
+        break;
+
+    case CONFIRM_USER:
+        // username
+        jsonvalue = object->find(u8"s1");
+        
+        if (jsonvalue == NULL || jsonvalue->type() != JsonValueW::Type::String)
+        {
+            LOG_E(tag_) << "cons, cmd CONFIRM_CHARACTER has no s1" << json_->string();
+            return;
+        }
+
+        strparm = jsonvalue->string();
+
+        if (strparm.length() < 5)
+        {
+            LOG_E(tag_) << "cons, cmd CONFIRM_CHARACTER contains s1 that too short" << json_->string();
+            return;
+        }
+
+        strparms_.push_back(jsonvalue->string());
+
+        // password
+        jsonvalue = object->find(u8"s2");
+
+        if (jsonvalue == NULL || jsonvalue->type() != JsonValueW::Type::String)
+        {
+            LOG_E(tag_) << "cons, cmd CONFIRM_CHARACTER has no s2" << json_->string();
+            return;
+        }
+
+        strparm = jsonvalue->string();
+
+        if (strparm.length() < 5)
+        {
+            LOG_E(tag_) << "cons, cmd CONFIRM_CHARACTER contains s2 that too short" << json_->string();
+            return;
+        }
+
+        strparms_.push_back(jsonvalue->string());
+
+        // gender
+        jsonvalue = object->find(u8"i1");
+        
+
+        if (jsonvalue == NULL || jsonvalue->type() != JsonValueW::Type::NumberInt)
+        {
+            LOG_E(tag_) << "cons, cmd CONFIRM_CHARACTER has no i1" << json_->string();
+            return;
+        }
+
+        uiparm = jsonvalue->integer();
+        if (uiparm != Player::GENDER_FEMALE && uiparm != Player::GENDER_MALE && uiparm != Player::GENDER_NEUTRAL)
+        {
+            LOG_E(tag_) << "cons, cmd CONFIRM_CHARACTER contain invalid gender:" << uiparm;
+            return;
+        }
+
+        uiparms_.push_back(uiparm);
+
+        // class
+        jsonvalue = object->find(u8"i2");
+
+        if (jsonvalue == NULL || jsonvalue->type() != JsonValueW::Type::NumberInt)
+        {
+            LOG_E(tag_) << "cons, cmd CONFIRM_CHARACTER has no i2" << json_->string();
+            return;
+        }
+
+        uiparm = jsonvalue->integer();
+
+        if (uiparm != Player::CLS_BELIEVER && uiparm != Player::CLS_SKILLER)
+        {
+            LOG_E(tag_) << "cons, cmd CONFIRM_CHARACTER contain invalid cls:" << uiparm;
+            return;
+        }
+
+        uiparms_.push_back(uiparm);
+        valid_ = true;
+        break;
+        
+    default:
+        // unknown cmd
         return;
     }
 }
 
-size_t octillion::Command::format( uint8_t* buf, size_t buflen, uint32_t cmd, const std::vector<uint32_t>& uin32parms)
+octillion::Command::~Command()
 {
-    uint8_t* anchor = buf;
-    size_t size;
-    uint32_t nlcmd;
-
-    // check if argument is correct
-    switch (cmd)
+    if (json_ != NULL)
     {
-    case UNKNOWN:
-        break;
-    case RESERVED_PCID:
-        if (uin32parms.size() != 1) return 0;
-        break;
-    case ROLL_CHARACTER:
-        if (uin32parms.size() != 4) return 0;
-        break;
-    default:
-        return 0;
+        delete json_;
     }
-
-    // return the required buf size if buf address is NULL
-    // cmd + argv
-    size = sizeof(uint32_t) + sizeof(uint32_t) * uin32parms.size();
-    
-    if ( buf == NULL || buflen == 0 )
-    {
-        return size;
-    }
-    
-    // copy cmd into prepared buffer
-    nlcmd = htonl( cmd );
-    memcpy((void*)anchor, (const void*)&nlcmd, sizeof(uint32_t));
-    anchor = anchor + sizeof(uint32_t);
-
-    // copy data into prepared buffer
-    for (size_t i = 0; i < uin32parms.size(); i++)
-    {
-        uint32_t nlparm = htonl(uin32parms[i]);
-        memcpy((void*)anchor, (const void*)&nlparm, sizeof(uint32_t));
-        anchor = anchor + sizeof(uint32_t);
-    }
-    
-    return size;
 }

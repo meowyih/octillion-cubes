@@ -1,5 +1,7 @@
 
 #include <ostream>
+#include <sstream>
+#include <string>
 #include <cstdlib>
 
 #include "world/cube.hpp"
@@ -28,4 +30,11 @@ void octillion::Player::roll(uint32_t gender, uint32_t cls, std::map<std::string
     attribute["cha"] = cha;
 
     return;
+}
+
+std::string octillion::Player::rollname()
+{
+    std::ostringstream stringStream;
+    stringStream << "wizard123";
+    return stringStream.str();
 }

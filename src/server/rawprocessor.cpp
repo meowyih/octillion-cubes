@@ -2,6 +2,7 @@
 #include <cstring>
 #include <map>
 #include <cstdint>
+#include <string>
 
 #ifdef WIN32
 #include <Winsock2.h>
@@ -16,6 +17,8 @@
 
 #include "world/world.hpp"
 #include "world/command.hpp"
+
+const std::string octillion::RawProcessor::tag_ = "RawProcessor";
 
 octillion::RawProcessorClient::RawProcessorClient()
 {
@@ -57,11 +60,11 @@ void octillion::RawProcessor::connect( int fd )
     if ( clients_.find( fd ) != clients_.end() )
     {
         clients_.erase( fd );
-        World::get_instance().logout( fd );
+        World::get_instance().disconnect( fd );
     }
     
     clients_[fd].fd_ = fd;
-    World::get_instance().login( fd );
+    World::get_instance().connect( fd );
 }
 
 std::error_code octillion::RawProcessor::senddata( int fd, uint8_t* data, size_t datasize )
@@ -82,7 +85,8 @@ std::error_code octillion::RawProcessor::senddata( int fd, uint8_t* data, size_t
     }
     
     encrypt( (uint8_t*)(buffer + sizeof( uint32_t )), datasize, key, keysize );
-       
+    
+    LOG_D(tag_) << "senddata, fd:" << fd << " size:" << sizeof(uint32_t) + datasize;   
     error = CoreServer::get_instance().senddata( fd, (const void*)buffer, sizeof( uint32_t ) + datasize );
 
     delete [] buffer;
@@ -95,7 +99,13 @@ std::error_code octillion::RawProcessor::senddata( int fd, uint8_t* data, size_t
     return error;
 }
 
-size_t octillion::RawProcessor::readheader( int fd, uint8_t* data, size_t datasize, size_t anchor )
+std::error_code octillion::RawProcessor::closefd(int fd)
+{
+    CoreServer::get_instance().requestclosefd(fd);
+    return OcError::E_SUCCESS;
+}
+
+int octillion::RawProcessor::readheader( int fd, uint8_t* data, size_t datasize, size_t anchor )
 {
     size_t read = 0;
     
@@ -163,13 +173,13 @@ size_t octillion::RawProcessor::readheader( int fd, uint8_t* data, size_t datasi
     return read;
 }
 
-size_t octillion::RawProcessor::readdata( int fd, uint8_t* data, size_t datasize, size_t anchor )
+int octillion::RawProcessor::readdata( int fd, uint8_t* data, size_t datasize, size_t anchor )
 {
-    size_t read = 0;
-    size_t remain;
+    int read = 0;
+    int remain;
     
     // calculate the remain space for clients_[fd].data_
-    remain = clients_[fd].datasize_ - clients_[fd].dataanchor_;
+    remain = (int)(clients_[fd].datasize_ - clients_[fd].dataanchor_);
     
     LOG_D(tag_) << "readdata datasize:" << datasize << 
         " anchor:" << anchor << 
@@ -184,7 +194,7 @@ size_t octillion::RawProcessor::readdata( int fd, uint8_t* data, size_t datasize
     }
     
     // copy data into clients_[fd].data_
-    if ( remain <= datasize - anchor )
+    if ( remain <= (int)(datasize - anchor) )
     {
         std::memcpy( (void*) ( clients_[fd].data_ + clients_[fd].dataanchor_ ), 
                      (void*) ( data + anchor ), 
@@ -214,10 +224,12 @@ size_t octillion::RawProcessor::readdata( int fd, uint8_t* data, size_t datasize
         Command* cmd = new Command( fd, clients_[fd].data_, clients_[fd].datasize_ );
         if ( cmd->valid() )
         {
-            World::get_instance().addcmd( cmd );
+            LOG_D(tag_) << "readdata, add cmd to World";
+            World::get_instance().addcmd( fd, cmd );
         }
         else
         {
+            LOG_D(tag_) << "readdata, invalid cmd, ignore and close fd";
             delete cmd;
             read = -1; // bad command, return -1 to close the connection
         }
@@ -226,7 +238,7 @@ size_t octillion::RawProcessor::readdata( int fd, uint8_t* data, size_t datasize
         clients_.erase(fd);
     }
     
-    LOG_D( tag_ ) << "RawProcessor::recv return " << read;
+    LOG_D( tag_ ) << "RawProcessor::readdata return " << read;
     
     return read;
 }
@@ -239,13 +251,14 @@ int octillion::RawProcessor::recv( int fd, uint8_t* data, size_t datasize )
     
     while ( anchor < datasize )
     {
-        size_t read;
+        int read;
         
         read = readheader( fd, data, datasize, anchor );
         
         if ( read < 0 )
         {
             // error, notify server to close fd
+            LOG_W(tag_) << "recv, failed to readhead, return 0";
             return 0;
         }
         
@@ -261,18 +274,21 @@ int octillion::RawProcessor::recv( int fd, uint8_t* data, size_t datasize )
         if ( read < 0 )
         {
             // error, notify server to close fd
+            LOG_W(tag_) << "recv, failed to readdata, return 0";
             return 0;            
         }
         
         anchor = anchor + read;
     }
+
+    LOG_D(tag_) << "recv, leave successfully, return 1";
     
     return 1;
 }
 
 void octillion::RawProcessor::disconnect( int fd )
 {    
-    World::get_instance().logout( fd );
+    World::get_instance().disconnect( fd );
     
     // check fd validation, only for safety
     if ( clients_.find( fd ) == clients_.end() )

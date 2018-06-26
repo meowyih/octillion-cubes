@@ -74,6 +74,9 @@ class octillion::CoreServer
         // send data via a fd
         std::error_code senddata( int fd, const void *buf, size_t len, bool autoretry = true );
 
+        // add fd into close queue and will be closed later in core_task thread
+        std::error_code requestclosefd(int fd);
+
         // check if server thread is still running
         bool is_running() { return is_running_; }
         
@@ -135,6 +138,10 @@ class octillion::CoreServer
         
         std::list<DataBuffer> list_;
         std::mutex list_lock_;
+
+        // fd that waiting for close
+        std::mutex badfds_lock_;
+        std::list<int> badfds_;
     
     private:
         const int kEpollTimeout = 5 * 1000;

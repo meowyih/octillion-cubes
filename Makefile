@@ -5,7 +5,8 @@ VPATH = include \
         src/error \
         src/server \
         src/world \
-        src/database
+        src/database \
+        src/jsonw
 
 OBJDIR = obj
 OBJS = $(addprefix $(OBJDIR)/, \
@@ -19,6 +20,7 @@ OBJS = $(addprefix $(OBJDIR)/, \
        command.o \
        world.o \
        filedatabase.o \
+       jsonw.o \
        )
 
 TARGET = exe
@@ -47,3 +49,4 @@ clean:
 	@rm -rf $(OBJDIR)
 	@rm -rf ${TARGET}
 	@rm -rf save
+    

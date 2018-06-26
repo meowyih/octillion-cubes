@@ -41,7 +41,7 @@ class octillion::RawProcessorClient
 class octillion::RawProcessor : public octillion::CoreServerCallback
 {
     private:
-        const std::string tag_ = "RawProcessor";
+        const static std::string tag_; // defined in rawprocessor.cpp
         
     public:
         RawProcessor();
@@ -54,14 +54,15 @@ class octillion::RawProcessor : public octillion::CoreServerCallback
         virtual void disconnect( int fd ) override;
         
     public:
-        std::error_code senddata( int fd, uint8_t* data, size_t datasize );
+        static std::error_code senddata( int fd, uint8_t* data, size_t datasize );
+        static std::error_code closefd(int fd);
         
     private:        
-        void encrypt( uint8_t* data, size_t datasize, uint8_t* key, size_t keysize );
-        void decrypt( uint8_t* data, size_t datasize, uint8_t* key, size_t keysize );
+        static void encrypt( uint8_t* data, size_t datasize, uint8_t* key, size_t keysize );
+        static void decrypt( uint8_t* data, size_t datasize, uint8_t* key, size_t keysize );
 
-        size_t readheader( int fd, uint8_t* data, size_t datasize, size_t anchor );
-        size_t readdata( int fd, uint8_t* data, size_t datasize, size_t anchor );
+        int readheader( int fd, uint8_t* data, size_t datasize, size_t anchor );
+        int readdata( int fd, uint8_t* data, size_t datasize, size_t anchor );
 
     private:
         std::map<int, RawProcessorClient> clients_;
