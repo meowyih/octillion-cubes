@@ -49,7 +49,9 @@ namespace
                 
             case OcError::E_PROTOCOL_FD_DUPLICATE_CONNECT:
                 return "Same fd connect twice";
-                
+
+            case OcError::E_WORLD_FREEZED:
+                return "World has been freezed";
             default:
                 return "Unknown error";
         }

@@ -47,6 +47,9 @@ public:
     const static int LOGIN = 19;
     const static int LOGOUT = 20;
 
+    // TODO: only admin can freeze the entire world
+    const static int FREEZE_WORLD = 2999;
+
 public:
     // command error
     const static int E_CMD_SUCCESS = 0;

@@ -27,6 +27,8 @@ enum class OcError
     E_PROTOCOL_FD_NO_CONNECT = 300,
     E_PROTOCOL_FD_DUPLICATE_CONNECT = 301,
     E_PROTOCOL_FD_LOGOUT = 302,
+
+    E_WORLD_FREEZED = 400,
     
     E_FATAL = 999,    
 };

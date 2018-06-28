@@ -51,7 +51,7 @@ public:
     void addcmd(int fd, Command* cmd);
 
 public:    
-    virtual void tick() override;
+    virtual std::error_code tick() override;
     virtual void tickcallback(
         uint32_t type,
         uint32_t param1,
@@ -62,7 +62,9 @@ private:
     std::error_code cmdValidateUsername(int fd, Command *cmd, JsonObjectW* jsonobject);
     std::error_code cmdConfirmUser(int fd, Command* cmd, JsonObjectW* jsonobject);
     std::error_code cmdLogin(int fd, Command* cmd, JsonObjectW* jsonobject);
-    std::error_code cmdLogout(int fd, Command* cmd);
+    std::error_code cmdLogout(int fd, Command* cmd, JsonObjectW* jsonobject);
+
+    std::error_code cmdFreezeWorld(int fd, Command* cmd, JsonObjectW* jsonobject);
 
 private:
     std::mutex cmds_lock_;

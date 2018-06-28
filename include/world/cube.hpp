@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <string>
+#include <system_error>
 
 #include "world/tick.hpp"
 
@@ -75,7 +76,7 @@ public:
         bool rev4 = false);
 
 public:
-    virtual void tick() override;
+    virtual std::error_code tick() override;
 
 private:
     CubePosition loc_;

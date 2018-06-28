@@ -58,8 +58,13 @@ int main ()
         
         if ( nowms - lastms > 1000 )
         {
-            octillion::World::get_instance().tick(); 
+            err = octillion::World::get_instance().tick(); 
             lastms = nowms;
+        }
+
+        if ( err == OcError::E_WORLD_FREEZED )
+        {
+            break;
         }
         
         if ( flag == 1 )
@@ -68,7 +73,11 @@ int main ()
         }
     }
     
-    octillion::CoreServer::get_instance().stop();
+    if ( octillion::CoreServer::get_instance().is_running() )
+    {
+        octillion::CoreServer::get_instance().stop();
+    }
+
     delete cscb;
     delete rawprocessor;
 

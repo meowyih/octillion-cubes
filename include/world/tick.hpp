@@ -2,6 +2,7 @@
 #define OCTILLION_TICK_HEADER
 
 #include <cstdint>
+#include <system_error>
 
 // Tick is a object that can keep itself 'state' and
 // go next state by member function 'tick()'
@@ -25,7 +26,7 @@ class octillion::Tick
 {
 public:
     // pure virtual function that can "tick()"
-    virtual void tick() = 0;
+    virtual std::error_code tick() = 0;
 };
 
 

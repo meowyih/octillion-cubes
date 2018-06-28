@@ -35,52 +35,11 @@ octillion::World::World()
     cubes_.insert(std::pair<CubePosition, Cube*>(CubePosition(), cube0));
     cubes_.insert( std::pair<CubePosition, Cube*>(loc1, cube1));
     cubes_.insert( std::pair<CubePosition, Cube*>(loc2, cube2));
-#if 0
-    for (auto& it : cubes_)
-    {
-        std::cout << (it.first).x_axis_ << "," << (it.first).y_axis_ << "," << (it.first).z_axis_;
-        std::cout << ":" << ((it.second)->location().str());
-
-        uint8_t exit;
-
-        if ((exit = it.second->getexit(CubePosition::NORTH)) > 0)
-        {
-            std::cout << "exit to NORTH:" << (int)exit << std::endl;
-        }
-
-        if ((exit = it.second->getexit(CubePosition::EAST)) > 0)
-        {
-            std::cout << "exit to EAST:" << (int)exit << std::endl;
-        }
-
-        if ((exit = it.second->getexit(CubePosition::WEST)) > 0)
-        {
-            std::cout << "exit to WEST:" << (int)exit << std::endl;
-        }
-
-        if ((exit = it.second->getexit(CubePosition::SOUTH)) > 0)
-        {
-            std::cout << "exit to SOUTH:" << (int)exit << std::endl;
-        }
-
-        if ((exit = it.second->getexit(CubePosition::UP)) > 0)
-        {
-            std::cout << "exit to UP:" << (int)exit << std::endl;
-        }
-
-        if ((exit = it.second->getexit(CubePosition::DOWN)) > 0)
-        {
-            std::cout << "exit to DOWN:" << (int)exit << std::endl;
-        }
-
-        std::cout << std::endl;
-    }
-#endif
 }
 
 octillion::World::~World()
 {
-    LOG_D(tag_) << "Destructor";
+    LOG_D(tag_) << "~World() start";
     for (auto& it : cubes_)
     {
         delete it.second;
@@ -88,14 +47,24 @@ octillion::World::~World()
 
     for (auto& it : players_)
     {
+        Player* player = it.second;
+
+        if ( player == NULL )
+        {
+            continue;
+        }
+
+        LOG_D(tag_) << "~World() save and remove player resource, fd:" << it.first << " username:" << player->username() << " pcid:" << player->id();
         database_.save(it.second);
         delete it.second;
     }
 
     for (auto& it : cmds_)
     {
+        LOG_D(tag_) << "~World() delete cmd fd:" << it.first;
         delete it.second;
     }
+    LOG_D(tag_) << "~World() done";
 }
 
 std::error_code octillion::World::connect(int fd)
@@ -216,9 +185,15 @@ std::error_code octillion::World::move( int pcid, CubePosition::Direction dir )
     return OcError::E_SUCCESS;        
 }
 
-void octillion::World::tick()
+std::error_code octillion::World::tick()
 {    
-    // data that need to send to pc after this tick
+    // if need to freeze
+    bool freezeworld = false;
+    
+    // jsons that need send back to player
+    std::map<int, JsonTextW*> jsons;
+
+    // command's response
     std::map<int, JsonObjectW*> cmdbacks;
     
     LOG_D(tag_) << "tick start, cmds_.size:" << cmds_.size();
@@ -251,7 +226,14 @@ void octillion::World::tick()
                 err = cmdLogin(fd, cmd, cmdback);
                 break;
             case Command::LOGOUT:
-                err = cmdLogout(fd, cmd);
+                err = cmdLogout(fd, cmd, cmdback);
+                break;
+            case Command::FREEZE_WORLD:
+                err = cmdFreezeWorld(fd, cmd, cmdback);
+                if (err == OcError::E_SUCCESS)
+                {
+                    freezeworld = true;
+                }
                 break;
             default: // undefined commands
                 err = cmdUnknown(fd, cmd, cmdback);
@@ -287,22 +269,72 @@ void octillion::World::tick()
     cmds_.clear();
     cmds_lock_.unlock();
 
-    // send data to each pc via RawProcessor to CoreClient
-    for (auto& it : cmdbacks)
+    // encapsulate cmdbacks (JsonObjectW) into jsons (JsonTextW)
+    for ( const auto& itcmdbacks : cmdbacks)
     {
-        uint32_t fd = it.first;
-        JsonObjectW* cmdback = it.second;
+        int fd = itcmdbacks.first;
+        JsonObjectW* cmdback = itcmdbacks.second;
         JsonObjectW* containerobj = new JsonObjectW();
         containerobj->add(u8"cmd", cmdback);
         JsonTextW* jsontext = new JsonTextW(containerobj);
+        jsons[fd] = jsontext;
+    }
+    
+    // add environment information to each players_ (dummy function for now)
+    for ( auto& it : players_ )
+    {
+        // retrieve each object from jsons by fd
+        JsonObjectW* jsonobject;
+        int fd = it.first;
+
+        // we only send env msg to login players
+        if (it.second == NULL)
+        {
+            continue;
+        }
+        
+        auto itjson = jsons.find( fd );   
+        if ( itjson == jsons.end() )
+        {
+            jsonobject = new JsonObjectW();
+            JsonTextW* jsontext = new JsonTextW( jsonobject );
+            jsons[fd] = jsontext;
+        }
+        else
+        {
+            JsonTextW* jsontext = itjson->second;
+            JsonValueW* jsonvalue = jsontext->value();
+            jsonobject = jsonvalue->object();
+        }
+        
+        // add data into each player
+        jsonobject->add(u8"env", u8"ticktest" );
+    }
+    
+    // send data back to players_
+    for ( const auto& it : jsons )
+    {
+        int fd = it.first;
+        JsonTextW* jsontext = it.second;
         std::string utf8 = jsontext->string();
-
         RawProcessor::senddata(fd, (uint8_t*)utf8.data(), utf8.size() );
-
         delete jsontext;
     }
 
+    // freeze the world and return
+    if (freezeworld)
+    {
+        // cannot stop the server inside the cmds_lock_ mutex
+        LOG_I(tag_) << "tick, stopping the coreserver";
+
+        // stop server
+        octillion::CoreServer::get_instance().stop();
+
+        return OcError::E_WORLD_FREEZED;
+    }
+
     LOG_D(tag_) << "tick, done";
+    return OcError::E_SUCCESS;
 }
 
 std::error_code octillion::World::cmdUnknown(int fd, Command *cmd, JsonObjectW* jsonobject)
@@ -480,13 +512,16 @@ std::error_code octillion::World::cmdLogin(int fd, Command* cmd, JsonObjectW* js
     }
     
     players_[fd] = player;
+
+    jsonobject->add(u8"cmd", Command::LOGIN);
+    jsonobject->add(u8"err", Command::E_CMD_SUCCESS);
     
     LOG_I(tag_) << "cmdLogin done, fd:" << fd << " pcid:" << pcid;
     
     return OcError::E_SUCCESS;
 }
 
-std::error_code octillion::World::cmdLogout(int fd, Command* cmd)
+std::error_code octillion::World::cmdLogout(int fd, Command* cmd, JsonObjectW* jsonobject)
 {
     LOG_D(tag_) << "cmdLogout start, fd:" << fd;
     
@@ -497,9 +532,32 @@ std::error_code octillion::World::cmdLogout(int fd, Command* cmd)
         LOG_E(tag_) << "cmdLogout, failed to logout player since fd:" << fd << " does not exist in players_";
         return OcError::E_PROTOCOL_FD_NO_CONNECT;
     }
-    
+
+    // save and release player
+    if (it->second != NULL)
+    {
+        database_.save(it->second);
+        delete it->second;
+        it->second = NULL;
+    }
+
+    jsonobject->add(u8"cmd", Command::LOGOUT);
+    jsonobject->add(u8"err", Command::E_CMD_SUCCESS);
+
     LOG_D(tag_) << "cmdLogout done, fd:" << fd;
-    return OcError::E_PROTOCOL_FD_LOGOUT;
+    return OcError::E_SUCCESS;
+}
+
+std::error_code octillion::World::cmdFreezeWorld(int fd, Command* cmd, JsonObjectW* jsonobject)
+{
+    LOG_D(tag_) << "cmdFreezeWorld start, fd:" << fd;
+
+    // TODO: check if allow to freeze
+    jsonobject->add(u8"cmd", Command::FREEZE_WORLD);
+    jsonobject->add(u8"err", Command::E_CMD_SUCCESS);
+
+    LOG_D(tag_) << "cmdFreezeWorld done, fd:" << fd;
+    return OcError::E_SUCCESS;
 }
 
 void octillion::World::tickcallback(uint32_t type, uint32_t param1, uint32_t param2)

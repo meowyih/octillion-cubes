@@ -1,7 +1,10 @@
 
 #include <sstream>
 #include <cstring> // memset
+#include <system_error>
+
 #include "world/cube.hpp"
+#include "error/ocerror.hpp"
 
 octillion::CubePosition::CubePosition()
 {
@@ -60,8 +63,9 @@ octillion::Cube::~Cube()
 {
 }
 
-void octillion::Cube::tick()
+std::error_code octillion::Cube::tick()
 {
+    return OcError::E_SUCCESS;
 }
 
 bool octillion::Cube::setexit(const Cube& cube, uint8_t type)

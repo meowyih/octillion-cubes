@@ -194,7 +194,15 @@ octillion::Command::Command( uint32_t fd, uint8_t* data, size_t datasize )
 
         strparms_.push_back(jsonvalue->string());
         valid_ = true;
-        break;        
+        break;       
+
+    case LOGOUT:
+        valid_ = true;
+        break;
+
+    case FREEZE_WORLD:
+        valid_ = true;
+        break;
     default:
         // unknown cmd
         return;
