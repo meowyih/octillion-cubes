@@ -115,6 +115,29 @@ void octillion::FileDatabase::init(std::string directory)
     LOG_D(tag_) << "init leave, directory_:" << directory_;
 }
 
+uint32_t octillion::FileDatabase::login(std::string name, std::string password)
+{
+    LOG_D(tag_) << "login start, name:" << name << " pwd:" << password;
+
+    std::string hashedpwd = hashpassword( password );    
+    
+    auto it = userlist_.find( name );    
+    if ( it == userlist_.end() )
+    {
+        LOG_I(tag_) << "login failed, no username:" << name;
+        return 0;
+    }
+    
+    if ( it->second.password == hashedpwd )
+    {
+        LOG_I(tag_) << "login successfully, username:" << name;
+        return it->second.pcid;
+    }
+    
+    LOG_I(tag_) << "login failed, existing name:" << name << " wrong pwd:" << password;
+    return 0;
+}
+
 // TODO: use openssl library to hash password
 std::string octillion::FileDatabase::hashpassword(std::string password)
 {
@@ -247,9 +270,6 @@ std::error_code octillion::FileDatabase::load( uint32_t pcid, Player* player )
 
         std::getline(idxfile, line);
         player->password(line);
-
-        std::getline(idxfile, line);
-        player->id((uint32_t)std::stoi(line));
 
         std::getline(idxfile, line);
         player->id((uint32_t)std::stoi(line));

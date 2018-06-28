@@ -44,6 +44,12 @@ namespace
             case OcError::E_DB_DUPLICATE_USERNAME:
                 return "Username already exist in database";
                 
+            case OcError::E_PROTOCOL_FD_NO_CONNECT:
+                return "FD existing without connect";
+                
+            case OcError::E_PROTOCOL_FD_DUPLICATE_CONNECT:
+                return "Same fd connect twice";
+                
             default:
                 return "Unknown error";
         }

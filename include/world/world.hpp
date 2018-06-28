@@ -61,6 +61,8 @@ private:
     std::error_code cmdUnknown(int fd, Command *cmd, JsonObjectW* jsonobject);
     std::error_code cmdValidateUsername(int fd, Command *cmd, JsonObjectW* jsonobject);
     std::error_code cmdConfirmUser(int fd, Command* cmd, JsonObjectW* jsonobject);
+    std::error_code cmdLogin(int fd, Command* cmd, JsonObjectW* jsonobject);
+    std::error_code cmdLogout(int fd, Command* cmd);
 
 private:
     std::mutex cmds_lock_;

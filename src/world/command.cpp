@@ -155,7 +155,46 @@ octillion::Command::Command( uint32_t fd, uint8_t* data, size_t datasize )
         uiparms_.push_back(uiparm);
         valid_ = true;
         break;
+    case LOGIN:
+        // username
+        jsonvalue = object->find(u8"s1");
         
+        if (jsonvalue == NULL || jsonvalue->type() != JsonValueW::Type::String)
+        {
+            LOG_E(tag_) << "cons, cmd LOGIN has no s1" << json_->string();
+            return;
+        }
+
+        strparm = jsonvalue->string();
+
+        if (strparm.length() < 5)
+        {
+            LOG_E(tag_) << "cons, cmd LOGIN contains s1 that too short" << json_->string();
+            return;
+        }
+
+        strparms_.push_back(jsonvalue->string());
+
+        // password
+        jsonvalue = object->find(u8"s2");
+
+        if (jsonvalue == NULL || jsonvalue->type() != JsonValueW::Type::String)
+        {
+            LOG_E(tag_) << "cons, cmd LOGIN has no s2" << json_->string();
+            return;
+        }
+
+        strparm = jsonvalue->string();
+
+        if (strparm.length() < 5)
+        {
+            LOG_E(tag_) << "cons, cmd LOGIN contains s2 that too short" << json_->string();
+            return;
+        }
+
+        strparms_.push_back(jsonvalue->string());
+        valid_ = true;
+        break;        
     default:
         // unknown cmd
         return;

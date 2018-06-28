@@ -24,6 +24,10 @@ enum class OcError
     E_DB_NO_RECORD = 200,
     E_DB_DUPLICATE_USERNAME = 201,
     
+    E_PROTOCOL_FD_NO_CONNECT = 300,
+    E_PROTOCOL_FD_DUPLICATE_CONNECT = 301,
+    E_PROTOCOL_FD_LOGOUT = 302,
+    
     E_FATAL = 999,    
 };
 

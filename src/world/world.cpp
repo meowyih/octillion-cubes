@@ -221,7 +221,7 @@ void octillion::World::tick()
     // data that need to send to pc after this tick
     std::map<int, JsonObjectW*> cmdbacks;
     
-    LOG_D(tag_) << "tick, cmds_.size:" << cmds_.size();
+    LOG_D(tag_) << "tick start, cmds_.size:" << cmds_.size();
 
     // handle commands in cmds_
     cmds_lock_.lock();
@@ -232,7 +232,7 @@ void octillion::World::tick()
         Command* cmd = it.second;
         std::error_code err = OcError::E_SUCCESS;
         JsonObjectW* cmdback = new JsonObjectW();
-
+        
         if (cmd == NULL || !cmd->valid())
         {
             cmdback->add(u8"err", Command::E_CMD_BAD_FORMAT);
@@ -247,22 +247,34 @@ void octillion::World::tick()
             case Command::CONFIRM_USER:
                 err = cmdConfirmUser(fd, cmd, cmdback);
                 break;
+            case Command::LOGIN:
+                err = cmdLogin(fd, cmd, cmdback);
+                break;
+            case Command::LOGOUT:
+                err = cmdLogout(fd, cmd);
+                break;
             default: // undefined commands
                 err = cmdUnknown(fd, cmd, cmdback);
                 break;
             }
         }
 
-        if (err == OcError::E_SUCCESS)
+        if ( err == OcError::E_SUCCESS )
         {
             // insert data to output data map
             cmdbacks[fd] = cmdback;
+        }
+        else if ( err == OcError::E_PROTOCOL_FD_LOGOUT )
+        {
+            // close fd due to logout
+            RawProcessor::closefd(fd);
+            LOG_I(tag_) << "tick, request disconnect due to logout cmd";
         }
         else
         {
             // fatal error, close fd
             RawProcessor::closefd(fd);
-            LOG_E(tag_) << "failed to handle incoming command cmd:" << cmd->cmd();
+            LOG_E(tag_) << "tick, failed to handle incoming command cmd:" << cmd->cmd();
         }
     }
 
@@ -290,27 +302,32 @@ void octillion::World::tick()
         delete jsontext;
     }
 
-    LOG_D(tag_) << "tick, leave";
+    LOG_D(tag_) << "tick, done";
 }
 
 std::error_code octillion::World::cmdUnknown(int fd, Command *cmd, JsonObjectW* jsonobject)
 {
-    LOG_D(tag_) << "cmdUnknown";
+    LOG_D(tag_) << "cmdUnknown start";
     jsonobject->add(u8"err", Command::E_CMD_UNKNOWN_COMMAND );
+    LOG_D(tag_) << "cmdUnknown done";
     return OcError::E_SUCCESS;
 }
 
 std::error_code octillion::World::cmdValidateUsername(int fd, Command *cmd, JsonObjectW* jsonobject)
 {
-    LOG_D(tag_) << "cmdValidateUsername";
+    
     std::string username, validname;
     std::error_code err;
+
+    username = cmd->strparms_[0];
+    
+    LOG_D(tag_) << "cmdValidateUsername start, fd:" << fd << " name:" << username;
 
     auto it = players_.find(fd);
 
     if (it == players_.end())
     {
-        LOG_E(tag_) << "cmdValidateUsername() fd:" << fd << " does not exist in players_";
+        LOG_E(tag_) << "cmdValidateUsername fd:" << fd << " does not exist in players_";
         return OcError::E_FATAL;
     }
 
@@ -318,11 +335,9 @@ std::error_code octillion::World::cmdValidateUsername(int fd, Command *cmd, Json
 
     if (player != NULL)
     {
-        LOG_E(tag_) << "cmdValidateUsername() fd:" << fd << " has player data.";
+        LOG_E(tag_) << "cmdValidateUsername fd:" << fd << " has player data.";
         return OcError::E_FATAL;
     }
-
-    username = cmd->strparms_[0];
 
     err = database_.reserve(fd, username);
 
@@ -351,9 +366,11 @@ std::error_code octillion::World::cmdValidateUsername(int fd, Command *cmd, Json
 
             // don't want to wast time in this
             if (appendix > 999)
+            if (appendix > 999)
             {
                 jsonobject->add(u8"cmd", Command::VALIDATE_USERNAME);
                 jsonobject->add(u8"err", Command::E_CMD_TOO_COMMON_NAME);
+                LOG_D(tag_) << "cmdValidateUsername, err: name " << username << " too common";
                 return OcError::E_SUCCESS;
             }
 
@@ -366,6 +383,7 @@ std::error_code octillion::World::cmdValidateUsername(int fd, Command *cmd, Json
     jsonobject->add(u8"err", Command::E_CMD_SUCCESS);
     jsonobject->add(u8"s1", validname);
 
+    LOG_D(tag_) << "cmdValidateUsername done, valid name:" << validname;
     return OcError::E_SUCCESS;
 }
 
@@ -376,7 +394,23 @@ std::error_code octillion::World::cmdConfirmUser(int fd, Command *cmd, JsonObjec
     std::string password = cmd->strparms_[1];
     int gender = cmd->uiparms_[0];
     int cls = cmd->uiparms_[1];
+    
+    LOG_D(tag_) << "cmdConfirmUser start, fd:" << fd << " user:" << username << " gender:" << gender << " cls:" << cls;
+    
+    // fd should exists in players_ without loading any data (not yet created)
+    auto it = players_.find( fd );
+    if ( it == players_.end() )
+    {
+        LOG_E(tag_) << "cmdConfirmUser, failed to create player since fd " << fd << " does not exist in players_";
+        return OcError::E_PROTOCOL_FD_NO_CONNECT;
+    }
+    else if ( it->second != NULL )
+    {
+        LOG_E(tag_) << "cmdConfirmUser, failed to create player since fd " << fd << " already login in players_";
+        return OcError::E_PROTOCOL_FD_DUPLICATE_CONNECT;
+    }
 
+    //  create a default player
     Player* player = new Player();
 
     player->username(username);
@@ -387,16 +421,85 @@ std::error_code octillion::World::cmdConfirmUser(int fd, Command *cmd, JsonObjec
     err = database_.create(fd, player);
 
     if (err == OcError::E_SUCCESS)
-    {
+    {        
         jsonobject->add(u8"cmd", Command::CONFIRM_USER);
         jsonobject->add(u8"err", Command::E_CMD_SUCCESS);
+        players_[fd] = player;
+        
+        LOG_D(tag_) << "cmdConfirmUser done, user:" << username;
     }
     else
     {
-        LOG_E(tag_) << "cmdConfirmUser, failed to create player, err:" << err;
+        LOG_E(tag_) << "cmdConfirmUser, failed to create player:" << username << ", err:" << err;
+    }
+
+    return err;
+}
+
+std::error_code octillion::World::cmdLogin(int fd, Command* cmd, JsonObjectW* jsonobject)
+{
+    std::error_code err;
+    std::string username = cmd->strparms_[0];
+    std::string password = cmd->strparms_[1];
+    
+    LOG_D(tag_) << "cmdLogin start, fd:" << fd << " user:" << username;
+    
+    // fd should exists in players_
+    auto it = players_.find( fd );
+    if ( it == players_.end() )
+    {
+        LOG_E(tag_) << "cmdLogin, failed to create player since fd:" << fd << " user:" << username << " does not exist in players_";
+        return OcError::E_PROTOCOL_FD_NO_CONNECT;
+    }
+    else if ( it->second != NULL )
+    {
+        LOG_E(tag_) << "cmdLogin, login fd:" << fd << " user:" << username << " already exists in players_";
+        database_.save( it->second );
+        players_.erase( it );
+        return OcError::E_PROTOCOL_FD_DUPLICATE_CONNECT;
     }
     
-    return err;
+    uint32_t pcid = database_.login( username, password );
+    
+    if ( pcid == 0 )
+    {
+        jsonobject->add(u8"cmd", Command::LOGIN);
+        jsonobject->add(u8"err", Command::E_CMD_WRONG_USERNAME_PASSWORD);
+        LOG_D(tag_) << "cmdLogin, err: bad username/password" << username << " " << password;
+        return OcError::E_SUCCESS;
+    }
+    
+    Player* player = new Player();
+    err = database_.load( pcid, player );
+    
+    if ( err != OcError::E_SUCCESS)
+    {
+        LOG_E(tag_) << "cmdLogin, database_.load pcid:" << pcid << " return err:" << err;
+        delete player;
+        return err;
+    }
+    
+    players_[fd] = player;
+    
+    LOG_I(tag_) << "cmdLogin done, fd:" << fd << " pcid:" << pcid;
+    
+    return OcError::E_SUCCESS;
+}
+
+std::error_code octillion::World::cmdLogout(int fd, Command* cmd)
+{
+    LOG_D(tag_) << "cmdLogout start, fd:" << fd;
+    
+    // fd should exists in players_
+    auto it = players_.find( fd );
+    if ( it == players_.end() )
+    {
+        LOG_E(tag_) << "cmdLogout, failed to logout player since fd:" << fd << " does not exist in players_";
+        return OcError::E_PROTOCOL_FD_NO_CONNECT;
+    }
+    
+    LOG_D(tag_) << "cmdLogout done, fd:" << fd;
+    return OcError::E_PROTOCOL_FD_LOGOUT;
 }
 
 void octillion::World::tickcallback(uint32_t type, uint32_t param1, uint32_t param2)

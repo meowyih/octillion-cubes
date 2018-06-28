@@ -45,6 +45,7 @@ public:
     const static int VALIDATE_USERNAME = 13;
     const static int CONFIRM_USER = 17;
     const static int LOGIN = 19;
+    const static int LOGOUT = 20;
 
 public:
     // command error
@@ -52,6 +53,7 @@ public:
     const static int E_CMD_UNKNOWN_COMMAND = 100;
     const static int E_CMD_BAD_FORMAT = 101;
     const static int E_CMD_TOO_COMMON_NAME = 102;
+    const static int E_CMD_WRONG_USERNAME_PASSWORD = 103;
         
 public:  
     // set pcid to 0 if unknown

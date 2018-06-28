@@ -33,6 +33,7 @@ public:
     void init(std::string directory);
     
     virtual uint32_t pcid(std::string name) override; 
+    virtual uint32_t login(std::string name, std::string password) override;
     virtual std::string hashpassword(std::string password) override;
     virtual std::error_code reserve(int fd, std::string name) override;
     virtual std::error_code create( int fd, Player* player) override;
