@@ -6,7 +6,8 @@ VPATH = include \
         src/server \
         src/world \
         src/database \
-        src/jsonw
+        src/jsonw \
+        src/memory
 
 OBJDIR = obj
 OBJS = $(addprefix $(OBJDIR)/, \
@@ -14,13 +15,14 @@ OBJS = $(addprefix $(OBJDIR)/, \
        ocerror.o \
        coreserver.o \
        rawprocessor.o \
-       coreserver_cb_sample.o \
        cube.o \
        player.o \
        command.o \
        world.o \
        filedatabase.o \
        jsonw.o \
+       event.o \
+       memleak.o \
        )
 
 TARGET = exe

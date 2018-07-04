@@ -11,7 +11,6 @@
 #include "server/coreserver.hpp"
 #include "world/world.hpp"
 #include "server/rawprocessor.hpp"
-#include "server/coreserver_cb_sample.hpp"
 #include "error/macrolog.hpp"
 
 volatile sig_atomic_t flag = 0;
@@ -38,7 +37,6 @@ int main ()
     octillion::CoreServer::get_instance();
     
     octillion::RawProcessor* rawprocessor = new octillion::RawProcessor();
-    octillion::CoreServerCbSample* cscb = new octillion::CoreServerCbSample();
     
     octillion::CoreServer::get_instance().set_callback( rawprocessor );
     
@@ -78,7 +76,6 @@ int main ()
         octillion::CoreServer::get_instance().stop();
     }
 
-    delete cscb;
     delete rawprocessor;
 
     return 0;
