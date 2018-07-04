@@ -52,6 +52,10 @@ namespace
 
             case OcError::E_WORLD_FREEZED:
                 return "World has been freezed";
+
+            case OcError::E_WORLD_BAD_CUBE_POSITION:
+                return "World does not has this cube";
+
             default:
                 return "Unknown error";
         }

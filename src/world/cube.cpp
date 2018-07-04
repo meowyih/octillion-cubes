@@ -2,9 +2,12 @@
 #include <sstream>
 #include <cstring> // memset
 #include <system_error>
+#include <map>
 
 #include "world/cube.hpp"
+#include "jsonw/jsonw.hpp"
 #include "error/ocerror.hpp"
+#include "error/macrolog.hpp"
 
 octillion::CubePosition::CubePosition()
 {
@@ -27,21 +30,11 @@ octillion::CubePosition::CubePosition(uint32_t x, uint32_t y, uint32_t z)
     z_axis_ = z;
 }
 
-octillion::CubePosition::CubePosition(const CubePosition& rhs, Direction dir)
+void octillion::CubePosition::set(uint32_t x, uint32_t y, uint32_t z)
 {
-    x_axis_ = rhs.x_axis_;
-    y_axis_ = rhs.y_axis_;
-    z_axis_ = rhs.z_axis_;
-    
-    switch ( dir )
-    {
-    case CubePosition::NORTH: y_axis_++; break;
-    case CubePosition::EAST:  x_axis_++; break;
-    case CubePosition::SOUTH: y_axis_--; break;
-    case CubePosition::WEST:  x_axis_--; break;
-    case CubePosition::UP:    z_axis_++; break;
-    case CubePosition::DOWN:  z_axis_--; break;
-    }
+    x_axis_ = x;
+    y_axis_ = y;
+    z_axis_ = z;
 }
 
 std::string octillion::CubePosition::str()
@@ -51,144 +44,377 @@ std::string octillion::CubePosition::str()
     return oss.str();
 }
 
-octillion::Cube::Cube(CubePosition loc, TickCallback* cb)
+octillion::Cube::Cube(CubePosition loc)
 {
     loc_ = loc;
-    cb_ = cb;
-    
+    areaid_ = 0;
     std::memset( exits_, 0, sizeof exits_);
+}
+
+octillion::Cube::Cube(CubePosition loc, std::wstring wtitle, int areaid)
+{
+    loc_ = loc;
+    wtitle_ = wtitle;   
+    areaid_ = areaid;
+    std::memset( exits_, 0, sizeof exits_);
+}
+
+octillion::Cube::Cube( const Cube& rhs )
+{
+    loc_ = rhs.loc_;
+    wtitle_ = rhs.wtitle_;   
+    areaid_ = rhs.areaid_;
+    std::memcpy( exits_, rhs.exits_, sizeof exits_);
 }
 
 octillion::Cube::~Cube()
 {
 }
 
-std::error_code octillion::Cube::tick()
+bool octillion::Cube::addlink(Cube* dest)
 {
-    return OcError::E_SUCCESS;
+    CubePosition to = dest->loc();
+    if (to.x() == loc_.x() + 1 && to.y() == loc_.y() && to.z() == loc_.z())
+    {
+        exits_[1] = 1;
+    }
+    else if (to.x() == loc_.x() - 1 && to.y() == loc_.y() && to.z() == loc_.z())
+    {
+        exits_[3] = 1;
+    }
+    else if (to.x() == loc_.x() && to.y() == loc_.y() + 1 && to.z() == loc_.z())
+    {
+        exits_[2] = 1;
+    }
+    else if (to.x() == loc_.x() && to.y() == loc_.y() - 1 && to.z() == loc_.z())
+    {
+        exits_[0] = 1;
+    }
+    else if (to.x() == loc_.x() && to.y() == loc_.y() && to.z() == loc_.z() + 1)
+    {
+        exits_[4] = 1;
+    }
+    else if (to.x() == loc_.x() && to.y() == loc_.y() && to.z() == loc_.z() - 1)
+    {
+        exits_[5] = 1;
+    }
+    else
+    {
+        return false;
+    }
+
+    return true;
 }
 
-bool octillion::Cube::setexit(const Cube& cube, uint8_t type)
+
+octillion::Area::Area( JsonTextW* json )
 {
-    if (cube.loc_.y_axis_ == loc_.y_axis_ && cube.loc_.z_axis_ == loc_.z_axis_)
+    std::map<std::string, CubePosition> markmap;
+    JsonObjectW *object = json->value()->object();
+    JsonValueW* value;
+    JsonArrayW *array;
+     
+    // invalid json
+    if ( json == NULL || json->valid() == false )
     {
-        if (cube.loc_.x_axis_ == loc_.x_axis_ + 1)
-        {
-            setexit(CubePosition::EAST, type);
-        }
-        else if (cube.loc_.x_axis_ == loc_.x_axis_ - 1)
-        {
-            setexit(CubePosition::WEST, type);
-        }
-
-        return true;
-    }
-
-    if (cube.loc_.x_axis_ == loc_.x_axis_ && cube.loc_.z_axis_ == loc_.z_axis_)
-    {
-        if (cube.loc_.y_axis_ == loc_.y_axis_ + 1)
-        {
-            setexit(CubePosition::NORTH, type);
-        }
-        else if (cube.loc_.y_axis_ == loc_.y_axis_ - 1)
-        {
-            setexit(CubePosition::SOUTH, type);
-        }
-
-        return true;
-    }
-
-    if (cube.loc_.x_axis_ == loc_.x_axis_ && cube.loc_.y_axis_ == loc_.y_axis_)
-    {
-        if (cube.loc_.z_axis_ == loc_.z_axis_ + 1)
-        {
-            setexit(CubePosition::UP, type);
-        }
-        else if (cube.loc_.z_axis_ == loc_.z_axis_ - 1)
-        {
-            setexit(CubePosition::DOWN, type);
-        }
-
-        return true;
-    }
-
-    return false;
-}
-
-uint8_t octillion::Cube::getexit(CubePosition::Direction direction)
-{
-    switch (direction)
-    {
-    case CubePosition::NORTH: return exits_[0];
-    case CubePosition::EAST: return exits_[1];
-    case CubePosition::SOUTH: return exits_[2];
-    case CubePosition::WEST: return exits_[3];
-    case CubePosition::UP: return exits_[4];
-    case CubePosition::DOWN: return exits_[5];
-    }
-
-    return 0;
-}
-
-void octillion::Cube::setexit(CubePosition::Direction direction, uint8_t exit)
-{
-    switch (direction)
-    {
-    case CubePosition::NORTH: exits_[0] = exit; return;
-    case CubePosition::EAST: exits_[1] = exit; return;
-    case CubePosition::SOUTH: exits_[2] = exit; return;
-    case CubePosition::WEST: exits_[3] = exit; return;
-    case CubePosition::UP: exits_[4] = exit; return;
-    case CubePosition:: DOWN: exits_[5] = exit; return;
+        return;
     }
     
+    // valid area json is an object
+    if ( json->value()->type() != JsonValueW::Type::JsonObject )
+    {
+        return;
+    }
+
+    // area json must have id  
+    value = object->find( u8"id" );
+    if ( value == NULL || value->type() != JsonValueW::Type::NumberInt )
+    {
+        return;     
+    }
+    else
+    {
+        id_ = value->integer();
+    }
+    
+    // area json must have title
+    value = object->find( u8"title" );
+    if ( value == NULL || value->type() != JsonValueW::Type::String )
+    {
+        return;     
+    }
+    else
+    {
+        wtitle_ = value->wstring();
+    }
+    
+    // area json must have offset array
+    value = object->find( u8"offset" );
+    if ( value == NULL || value->type() != JsonValueW::Type::JsonArray )
+    {
+        return;     
+    }
+    else
+    {
+        array = value->array();
+        
+        if ( array->size() != 3 )
+        {
+            return;
+        }
+        
+        offset_x_ = array->at(0)->integer();
+        offset_y_ = array->at(1)->integer();
+        offset_z_ = array->at(2)->integer();
+    }
+    
+    // area json must have cubes
+    array = object->find( u8"cubes" )->array();
+    if ( array == NULL )
+    {
+        return;
+    }
+    
+    for ( size_t i = 0; i < array->size(); i ++ )
+    {
+        bool ret;
+        
+        // "cubes" array must contains only object
+        JsonObjectW* cubeobj = array->at(i)->object();        
+        if ( cubeobj == NULL )
+        {
+            return;
+        }
+        
+        // get loc and store in pos
+        CubePosition pos;
+        ret = readloc( cubeobj->find( u8"loc" ), pos, offset_x_, offset_y_, offset_z_ );        
+        if ( ret == false )
+        {
+            return;
+        }
+        
+        // check if duplicate cube
+        if ( cubes_.find( pos ) != cubes_.end() )
+        {
+            LOG_E(tag_) << "err: duplicate cube, pos x:" << pos.x() << " y:" << pos.y() << " z:" << pos.z();
+            return;
+        }
+        
+        // get title
+        JsonValueW* jtitle = cubeobj->find( u8"title" );
+        if ( jtitle == NULL || jtitle->type() != JsonValueW::Type::String || jtitle->string().length() == 0 )
+        {
+            return;
+        }
+
+        // get mark if exist (optional)        
+        JsonValueW* mark = cubeobj->find( u8"mark" );
+        if ( mark != NULL && mark->type() == JsonValueW::Type::String )
+        {
+            std::string str = mark->string();
+
+            if (str.length() == 0)
+            {
+                return;
+            }
+
+            // duplicate map
+            if ( markmap.find( mark->string() ) != markmap.end() )
+            {
+                LOG_E( tag_ ) << "err: duplicate cube mark " << mark->string();
+                return;
+            }
+            else
+            {
+                markmap[ mark->string() ] = pos;
+            }
+        }
+                
+        // create cube and store in cubes_
+        Cube* cube = new Cube( pos, jtitle->wstring(), id_ );
+        cubes_[pos] = cube;
+    }
+    
+    // links is optional in area, although it does not make sense to create area without it
+    array = object->find( u8"links" )->array();
+    if ( array != NULL )
+    {
+        bool ret;
+        for ( size_t i = 0; i < array->size(); i ++ )
+        {        
+            JsonObjectW* link = array->at(i)->object();
+            JsonValueW* linkvalue;
+
+            if (link == NULL)
+            {
+                return;
+            }
+
+            int type = link->find( u8"type" )->integer();            
+            if ( type == 0 )
+            {
+                return;
+            }
+            
+            CubePosition from, to;
+
+            // get 'from'
+            linkvalue = link->find( u8"from" );            
+            if ( linkvalue == NULL )
+            {
+                return;
+            }
+            else if ( linkvalue->type() == JsonValueW::Type::String )
+            {
+                std::string str = linkvalue->string();
+                auto it = markmap.find( str );
+                if ( it == markmap.end() )
+                {
+                    return;
+                }
+                else
+                {
+                    from = it->second;
+                }
+            }
+            else if ( linkvalue->type() == JsonValueW::Type::JsonArray )
+            {
+                ret = readloc( linkvalue, from, offset_x_, offset_y_, offset_z_ );
+                if ( ret == false )
+                {
+                    return;
+                }
+            }
+            else
+            {
+                return;
+            }
+            
+            // get 'to'
+            linkvalue = link->find( u8"to" );            
+            if ( linkvalue == NULL )
+            {
+                return;
+            }
+            else if ( linkvalue->type() == JsonValueW::Type::String )
+            {
+                std::string str = linkvalue->string();
+                auto it = markmap.find( str );
+                if ( it == markmap.end() )
+                {
+                    return;
+                }
+                else
+                {
+                    to = it->second;
+                }
+            }
+            else if ( linkvalue->type() == JsonValueW::Type::JsonArray )
+            {
+                ret = readloc( linkvalue, to, offset_x_, offset_y_, offset_z_ );
+                if ( ret == false )
+                {
+                    return;
+                }
+            }
+            else
+            {
+                return;
+            }
+            
+            // check if from and to both exists
+            if ( cubes_.find( from ) == cubes_.end() )
+            {
+                return;
+            }
+            
+            if ( cubes_.find( to ) == cubes_.end() )
+            {
+                return;
+            }
+            
+            // add link for each cube
+            Cube* cube1 = cubes_[from];
+            Cube* cube2 = cubes_[to];
+            
+            // type-2 is two-way link
+            if ( type == 2 )
+            {
+                if ( cube1->addlink( cube2 ) == false )
+                {
+                    return;
+                }
+                
+                if ( cube2->addlink( cube1 ) == false )
+                {
+                    return;
+                }
+            }
+        }
+    }
+    
+    valid_ = true;
     return;
 }
 
-uint8_t octillion::Cube::exitval(bool normal, bool hidden, bool fly, bool swim, bool rev1, bool rev2, bool rev3, bool rev4)
+octillion::Cube* octillion::Area::cube(CubePosition loc)
 {
-    uint8_t exit = 0;
-    if (normal)
-    {
-        exit = exit | 1;
-    }
+    auto it = cubes_.find(loc);
 
-    if (hidden)
+    if (it == cubes_.end())
     {
-        exit = exit | 2;
+        return NULL;
     }
-
-    if (fly)
+    else
     {
-        exit = exit | 4;
+        return it->second;
     }
-
-    if (swim)
-    {
-        exit = exit | 8;
-    }
-
-    if (rev1)
-    {
-        exit = exit | 16;
-    }
-
-    if (rev2)
-    {
-        exit = exit | 32;
-    }
-
-    if (rev3)
-    {
-        exit = exit | 64;
-    }
-
-    if (rev4)
-    {
-        exit = exit | 128;
-    }
-
-    return exit;
 }
 
+bool octillion::Area::readloc( JsonValueW* jvalue, CubePosition& pos, uint32_t offset_x, uint32_t offset_y, uint32_t offset_z )
+{
+    JsonArrayW* jarray;
+    uint32_t x, y, z;
+    if ( jvalue == NULL || jvalue->valid() == false || jvalue->type() != JsonValueW::Type::JsonArray )
+    {
+        return false;
+    }
+    
+    jarray = jvalue->array();
+    
+    if ( jarray->size() != 3 )
+    {
+        return false;
+    }
+    
+    if ( jarray->at(0)->type() != JsonValueW::Type::NumberInt ||
+        jarray->at(1)->type() != JsonValueW::Type::NumberInt ||
+        jarray->at(2)->type() != JsonValueW::Type::NumberInt)
+    {
+        return false;
+    }
+    
+    x = jarray->at(0)->integer() + offset_x;
+    y = jarray->at(1)->integer() + offset_y;
+    z = jarray->at(2)->integer() + offset_z;
+    
+    if ( x < 0 || y < 0 || z < 0 )
+    {
+        return false;
+    }
+    
+    pos.set( x, y, z );
+    return true;
+}
 
+octillion::Area::~Area()
+{
+    for (auto& it : cubes_)
+    {
+        if (it.second != NULL)
+        {
+            delete it.second;
+        }
+    }
+}

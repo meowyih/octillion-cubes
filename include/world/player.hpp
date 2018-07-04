@@ -8,6 +8,10 @@
 
 #include "world/cube.hpp"
 
+#ifdef MEMORY_DEBUG
+#include "memory/memleak.hpp"
+#endif
+
 // classes - skiller, believer
 // gender - male, female, neutral
 // attribute - Constitution, Mental, Luck, Charming
@@ -36,10 +40,14 @@ public:
 public:
     Player() :
         status_(0), id_(0), gender_(0), cls_(0), con_(0), men_(0), luc_(0), cha_(0) {}
+
     Player(uint32_t id) :
         status_(0), id_(id), gender_(0), cls_(0), con_(0), men_(0), luc_(0), cha_(0) {}
-    Player(uint32_t id, uint32_t gender, uint32_t cls, uint32_t con, uint32_t men, uint32_t luc, uint32_t cha) :
-        status_(0), id_(id), gender_(gender), cls_(cls), con_(con), men_(men), luc_(luc), cha_(cha) {}
+
+    Player(uint32_t id, uint32_t gender, uint32_t cls, uint32_t con, uint32_t men, uint32_t luc, uint32_t cha, 
+        CubePosition loc, std::string username, std::string password) :
+        status_(0), id_(id), gender_(gender), cls_(cls), con_(con), men_(men), luc_(luc), cha_(cha), loc_(loc),
+        username_(username), password_(password) {}
 
 public:
     // help static function to roll a player attribute based on gender and cls
@@ -57,7 +65,9 @@ public:
     uint32_t men() { return men_ ; }
     uint32_t luc() { return luc_; }
     uint32_t cha() { return cha_; }
-
+    CubePosition position() { return loc_; }
+    int fd() { return fd_; }
+    
     void username(std::string username) { username_ = username; }
     void password(std::string password) { password_ = password; }
     void status(uint32_t status) { status_ = status; }
@@ -68,7 +78,9 @@ public:
     void men(uint32_t men) { men_ = men; }
     void luc(uint32_t luc) { luc_ = luc; }
     void cha(uint32_t cha) { cha_ = cha;  }
-
+    void position(CubePosition loc) { loc_ = loc; }
+    void fd(int fd) { fd_ = fd; }
+    
     // put implementation in header is to avoid the complexity of
     // namespace plus friend, it could be done in cpp, but I don't see any
     // advantage
@@ -87,9 +99,10 @@ public:
     }
 
     void move(CubePosition loc);
-    CubePosition position() { return loc_; }
+    
 
 private:
+    int fd_ = 0;
     std::string username_;
     std::string password_;
     uint32_t status_;
@@ -99,6 +112,39 @@ private:
     uint32_t con_, men_, luc_, cha_;
 
     CubePosition loc_;
+
+#ifdef MEMORY_DEBUG
+public:
+    static void* operator new(size_t size)
+    {
+        void* memory = MALLOC(size);
+
+        MemleakRecorder::instance().alloc(__FILE__, __LINE__, memory);
+
+        return memory;
+    }
+
+    static void* operator new[](size_t size)
+    {
+        void* memory = MALLOC(size);
+
+        MemleakRecorder::instance().alloc(__FILE__, __LINE__, memory);
+
+        return memory;
+    }
+
+    static void operator delete(void* p)
+    {
+        MemleakRecorder::instance().release(p);
+        FREE(p);
+    }
+
+    static void operator delete[](void* p)
+    {
+        MemleakRecorder::instance().release(p);
+        FREE(p);
+    }
+#endif
 };
 
 #endif

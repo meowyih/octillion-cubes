@@ -14,6 +14,22 @@
 #include "database/database.hpp"
 #include "jsonw/jsonw.hpp"
 
+octillion::Command::Command(uint32_t fd, uint32_t cmd)
+{
+    switch (cmd)
+    {
+    case CONNECT:
+    case DISCONNECT:
+        valid_ = true;
+        break;
+    default:
+        valid_ = false;
+    }
+
+    fd_ = fd;
+    cmd_ = cmd;
+}
+
 octillion::Command::Command( uint32_t fd, uint8_t* data, size_t datasize )
 {
     uint8_t* buf = data;
@@ -203,6 +219,7 @@ octillion::Command::Command( uint32_t fd, uint8_t* data, size_t datasize )
     case FREEZE_WORLD:
         valid_ = true;
         break;
+
     default:
         // unknown cmd
         return;

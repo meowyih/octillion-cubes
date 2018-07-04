@@ -6,6 +6,11 @@
 #include <string>
 #include <map>
 
+#ifdef MEMORY_DEBUG
+#include "memory/memleak.hpp"
+#endif
+
+
 namespace octillion
 {
     class JsonTokenW;
@@ -63,6 +68,39 @@ private:
     double frac_ = 0.0;
     std::wstring wstring_;
     bool boolean_ = true;
+
+#ifdef MEMORY_DEBUG
+public:
+    static void* operator new(size_t size)
+    {
+        void* memory = MALLOC(size);
+
+        MemleakRecorder::instance().alloc(__FILE__, __LINE__, memory);
+
+        return memory;
+    }
+
+    static void* operator new[](size_t size)
+    {
+        void* memory = MALLOC(size);
+
+        MemleakRecorder::instance().alloc(__FILE__, __LINE__, memory);
+
+        return memory;
+    }
+
+        static void operator delete(void* p)
+    {
+        MemleakRecorder::instance().release(p);
+        FREE(p);
+    }
+
+    static void operator delete[](void* p)
+    {
+        MemleakRecorder::instance().release(p);
+        FREE(p);
+    }
+#endif
 };
 
 // JsonValueW represents a value in json. This class provide many different 
@@ -127,6 +165,39 @@ private:
     double frac_ = 0.0;
     bool boolean_ = true;
     std::wstring wstring_;
+
+#ifdef MEMORY_DEBUG
+public:
+    static void* operator new(size_t size)
+    {
+        void* memory = MALLOC(size);
+
+        MemleakRecorder::instance().alloc("JsonValueW", 0, memory);
+
+        return memory;
+    }
+
+    static void* operator new[](size_t size)
+    {
+        void* memory = MALLOC(size);
+
+        MemleakRecorder::instance().alloc("JsonValueW", 0, memory);
+
+        return memory;
+    }
+
+        static void operator delete(void* p)
+    {
+        MemleakRecorder::instance().release(p);
+        FREE(p);
+    }
+
+    static void operator delete[](void* p)
+    {
+        MemleakRecorder::instance().release(p);
+        FREE(p);
+    }
+#endif
 };
 
 // JsonObjectW represents an object in json, it was designed to contains multple
@@ -181,6 +252,39 @@ public:
 private:
     bool valid_ = false;
     std::map<std::wstring, JsonValueW*> wvalues_;
+
+#ifdef MEMORY_DEBUG
+public:
+    static void* operator new(size_t size)
+    {
+        void* memory = MALLOC(size);
+
+        MemleakRecorder::instance().alloc(__FILE__, __LINE__, memory);
+
+        return memory;
+    }
+
+    static void* operator new[](size_t size)
+    {
+        void* memory = MALLOC(size);
+
+        MemleakRecorder::instance().alloc(__FILE__, __LINE__, memory);
+
+        return memory;
+    }
+
+        static void operator delete(void* p)
+    {
+        MemleakRecorder::instance().release(p);
+        FREE(p);
+    }
+
+    static void operator delete[](void* p)
+    {
+        MemleakRecorder::instance().release(p);
+        FREE(p);
+    }
+#endif
 };
 
 
@@ -221,6 +325,39 @@ public:
 private:
     bool valid_ = false;
     std::vector<JsonValueW*> values_;
+
+#ifdef MEMORY_DEBUG
+public:
+    static void* operator new(size_t size)
+    {
+        void* memory = MALLOC(size);
+
+        MemleakRecorder::instance().alloc(__FILE__, __LINE__, memory);
+
+        return memory;
+    }
+
+    static void* operator new[](size_t size)
+    {
+        void* memory = MALLOC(size);
+
+        MemleakRecorder::instance().alloc(__FILE__, __LINE__, memory);
+
+        return memory;
+    }
+
+        static void operator delete(void* p)
+    {
+        MemleakRecorder::instance().release(p);
+        FREE(p);
+    }
+
+    static void operator delete[](void* p)
+    {
+        MemleakRecorder::instance().release(p);
+        FREE(p);
+    }
+#endif
 };
 
 // JsonTextW represents a json text defined in RFC7159, which contains exactly one value.
@@ -232,6 +369,7 @@ class octillion::JsonTextW
 public:
     // create JsonTextW from wistream, ucs string or utf8 string
     JsonTextW(std::wistream& ins);
+    JsonTextW(std::ifstream& fin);
     JsonTextW(const wchar_t* wstr);
     JsonTextW(const wchar_t* uscdata, size_t length );
     JsonTextW(const char* utf8str);
@@ -266,6 +404,39 @@ private:
 private:
     bool valid_ = false;
     JsonValueW* value_ = NULL;
+
+#ifdef MEMORY_DEBUG
+public:
+    static void* operator new(size_t size)
+    {
+        void* memory = MALLOC(size);
+
+        MemleakRecorder::instance().alloc(__FILE__, __LINE__, memory);
+
+        return memory;
+    }
+
+    static void* operator new[](size_t size)
+    {
+        void* memory = MALLOC(size);
+
+        MemleakRecorder::instance().alloc(__FILE__, __LINE__, memory);
+
+        return memory;
+    }
+
+        static void operator delete(void* p)
+    {
+        MemleakRecorder::instance().release(p);
+        FREE(p);
+    }
+
+    static void operator delete[](void* p)
+    {
+        MemleakRecorder::instance().release(p);
+        FREE(p);
+    }
+#endif
 };
 
 #endif // OCTILLION_JSONW_HEADER

@@ -7,6 +7,10 @@
 
 #include "server/coreserver.hpp"
 
+#ifdef MEMORY_DEBUG
+#include "memory/memleak.hpp"
+#endif
+
 namespace octillion
 {
     class RawProcessorClient;
@@ -35,7 +39,40 @@ class octillion::RawProcessorClient
         uint8_t key_[kRawProcessorMaxKeyPoolSize];
         
         size_t datasize_, dataanchor_;
-        uint8_t* data_;        
+        uint8_t* data_;
+
+#ifdef MEMORY_DEBUG
+public:
+    static void* operator new(size_t size)
+    {
+        void* memory = MALLOC(size);
+
+        MemleakRecorder::instance().alloc(__FILE__, __LINE__, memory);
+
+        return memory;
+    }
+
+    static void* operator new[](size_t size)
+    {
+        void* memory = MALLOC(size);
+
+        MemleakRecorder::instance().alloc(__FILE__, __LINE__, memory);
+
+        return memory;
+    }
+
+        static void operator delete(void* p)
+    {
+        MemleakRecorder::instance().release(p);
+        FREE(p);
+    }
+
+    static void operator delete[](void* p)
+    {
+        MemleakRecorder::instance().release(p);
+        FREE(p);
+    }
+#endif
 };
 
 class octillion::RawProcessor : public octillion::CoreServerCallback
@@ -69,6 +106,39 @@ class octillion::RawProcessor : public octillion::CoreServerCallback
         
     private:
         const static size_t kRawProcessorMaxDataChunkSize = 1024;
+
+#ifdef MEMORY_DEBUG
+public:
+    static void* operator new(size_t size)
+    {
+        void* memory = MALLOC(size);
+
+        MemleakRecorder::instance().alloc(__FILE__, __LINE__, memory);
+
+        return memory;
+    }
+
+    static void* operator new[](size_t size)
+    {
+        void* memory = MALLOC(size);
+
+        MemleakRecorder::instance().alloc(__FILE__, __LINE__, memory);
+
+        return memory;
+    }
+
+        static void operator delete(void* p)
+    {
+        MemleakRecorder::instance().release(p);
+        FREE(p);
+    }
+
+    static void operator delete[](void* p)
+    {
+        MemleakRecorder::instance().release(p);
+        FREE(p);
+    }
+#endif
 };
 
 namespace octillion

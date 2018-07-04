@@ -607,7 +607,7 @@ void octillion::CoreServer::core_task()
     }
     
     SSL_CTX_free( ctx );
-    
+
     delete [] events;  
 
     LOG_D(tag_) << "core_task leave";

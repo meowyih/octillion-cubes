@@ -8,6 +8,10 @@
 
 #include "database/database.hpp"
 
+#ifdef MEMORY_DEBUG
+#include "memory/memleak.hpp"
+#endif
+
 namespace octillion
 {
     class FileDatabaseListItem;
@@ -53,6 +57,39 @@ private:
 
     std::map<std::string, FileDatabaseListItem> userlist_;
     std::map<int, std::string> reservelist_;
+
+#ifdef MEMORY_DEBUG
+public:
+    static void* operator new(size_t size)
+    {
+        void* memory = MALLOC(size);
+
+        MemleakRecorder::instance().alloc(__FILE__, __LINE__, memory);
+
+        return memory;
+    }
+
+    static void* operator new[](size_t size)
+    {
+        void* memory = MALLOC(size);
+
+        MemleakRecorder::instance().alloc(__FILE__, __LINE__, memory);
+
+        return memory;
+    }
+
+        static void operator delete(void* p)
+    {
+        MemleakRecorder::instance().release(p);
+        FREE(p);
+    }
+
+    static void operator delete[](void* p)
+    {
+        MemleakRecorder::instance().release(p);
+        FREE(p);
+    }
+#endif
 };
 
 #endif

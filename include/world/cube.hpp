@@ -4,30 +4,38 @@
 #include <cstdint>
 #include <string>
 #include <system_error>
+#include <map>
 
-#include "world/tick.hpp"
+#include "jsonw/jsonw.hpp"
+
+#ifdef MEMORY_DEBUG
+#include "memory/memleak.hpp"
+#endif
 
 namespace octillion
 {
     class CubePosition;
     class Cube;
+    class Area;
 }
 
 class octillion::CubePosition
 {
-public:
-    enum Direction { NORTH , EAST, WEST, SOUTH, UP, DOWN };
+private:
+    const std::string tag_ = "CubePosition";
 
 public:
     CubePosition();
     CubePosition(const CubePosition& rhs);
-    CubePosition(const CubePosition& rhs, Direction dir);
     CubePosition(uint32_t x, uint32_t y, uint32_t z);
+    
+    void set(uint32_t x, uint32_t y, uint32_t z);
 
     std::string str();
-
 public:
-    uint32_t x_axis_, y_axis_, z_axis_;
+    uint32_t x() { return x_axis_; }
+    uint32_t y() { return y_axis_; }
+    uint32_t z() { return z_axis_; }
 
     bool operator < (const CubePosition& rhs) const
     {
@@ -46,44 +54,173 @@ public:
 
         return false;
     }
+
+    CubePosition& operator = (const CubePosition& rhs)
+    {
+        x_axis_ = rhs.x_axis_;
+        y_axis_ = rhs.y_axis_;
+        z_axis_ = rhs.z_axis_;
+
+        return *this;
+    }
+
+private:
+    uint32_t x_axis_, y_axis_, z_axis_;
+
+#ifdef MEMORY_DEBUG
+public:
+    static void* operator new(size_t size)
+    {
+        void* memory = MALLOC(size);
+
+        MemleakRecorder::instance().alloc(__FILE__, __LINE__, memory);
+
+        return memory;
+    }
+
+    static void* operator new[](size_t size)
+    {
+        void* memory = MALLOC(size);
+
+        MemleakRecorder::instance().alloc(__FILE__, __LINE__, memory);
+
+        return memory;
+    }
+
+        static void operator delete(void* p)
+    {
+        MemleakRecorder::instance().release(p);
+        FREE(p);
+    }
+
+    static void operator delete[](void* p)
+    {
+        MemleakRecorder::instance().release(p);
+        FREE(p);
+    }
+#endif
 };
 
-class octillion::Cube : octillion::Tick
+class octillion::Cube
 {
+private:
+    const std::string tag_ = "Cube";
+
 public:
-    Cube(CubePosition loc, TickCallback* cb );
+    Cube(CubePosition loc);
+    Cube(CubePosition loc, std::wstring wtitle, int areaid );
+    Cube( const Cube& rhs );
     ~Cube();
 
 public:
-    CubePosition location() { return loc_; }
-
-public:
-    
-    // enum ExitType { NORMAL, HIDDEN, FLY, SWIM };
-
-    uint8_t getexit(CubePosition::Direction direction);
-    bool setexit(const Cube& cube, uint8_t exit);
-    void setexit(CubePosition::Direction direction, uint8_t exit);
-
-    static uint8_t exitval(
-        bool normal = true,
-        bool hidden = false,
-        bool fly = false,
-        bool swim = false,
-        bool rev1 = false,
-        bool rev2 = false,
-        bool rev3 = false,
-        bool rev4 = false);
-
-public:
-    virtual std::error_code tick() override;
-
+    CubePosition loc() { return loc_; }
+    bool addlink(Cube* dest);
+    std::wstring wtitle() { return wtitle_; }
+        
 private:
+    int areaid_;
     CubePosition loc_;
-    TickCallback* cb_;
+    std::wstring wtitle_;
+
+public:
+    uint8_t exits_[6];
+
+#ifdef MEMORY_DEBUG
+public:
+    static void* operator new(size_t size)
+    {
+        void* memory = MALLOC(size);
+
+        MemleakRecorder::instance().alloc(__FILE__, __LINE__, memory);
+
+        return memory;
+    }
+
+    static void* operator new[](size_t size)
+    {
+        void* memory = MALLOC(size);
+
+        MemleakRecorder::instance().alloc(__FILE__, __LINE__, memory);
+
+        return memory;
+    }
+
+        static void operator delete(void* p)
+    {
+        MemleakRecorder::instance().release(p);
+        FREE(p);
+    }
+
+    static void operator delete[](void* p)
+    {
+        MemleakRecorder::instance().release(p);
+        FREE(p);
+    }
+#endif
+};
+
+class octillion::Area
+{
+private:
+    const std::string tag_ = "Area";
+
+public:
+    Area(JsonTextW* json);
+    ~Area();
+
+    bool valid() { return valid_; }
+    int id() { return id_; }
+    std::wstring wtitle() { return wtitle_; }
+    Cube* cube(CubePosition loc);
+
+    int offset_x() { return offset_x_; }
+    int offset_y() { return offset_y_; }
+    int offset_z() { return offset_z_; }
+
+public:
+    std::map<CubePosition, Cube*> cubes_;
 
 private:
-    uint8_t exits_[6];
+    static bool readloc( JsonValueW* jvalue, CubePosition& pos, uint32_t offset_x, uint32_t offset_y, uint32_t offset_z );
+    
+private:
+    bool valid_ = false;
+    int id_;
+    int offset_x_, offset_y_, offset_z_;
+    std::wstring wtitle_;
+
+#ifdef MEMORY_DEBUG
+public:
+    static void* operator new(size_t size)
+    {
+        void* memory = MALLOC(size);
+
+        MemleakRecorder::instance().alloc(__FILE__, __LINE__, memory);
+
+        return memory;
+    }
+
+    static void* operator new[](size_t size)
+    {
+        void* memory = MALLOC(size);
+
+        MemleakRecorder::instance().alloc(__FILE__, __LINE__, memory);
+
+        return memory;
+    }
+
+        static void operator delete(void* p)
+    {
+        MemleakRecorder::instance().release(p);
+        FREE(p);
+    }
+
+    static void operator delete[](void* p)
+    {
+        MemleakRecorder::instance().release(p);
+        FREE(p);
+    }
+#endif
 };
 
 #endif

@@ -59,12 +59,14 @@ void octillion::RawProcessor::connect( int fd )
     // clients_ automatically creates element if key fd does not exist 
     if ( clients_.find( fd ) != clients_.end() )
     {
+        LOG_E(tag_) << "connect fd:" << fd << " already exists in clients_";
         clients_.erase( fd );
-        World::get_instance().disconnect( fd );
     }
-    
+
     clients_[fd].fd_ = fd;
-    World::get_instance().connect( fd );
+
+    Command* cmd = new Command(fd, Command::CONNECT);
+    World::get_instance().addcmd(cmd);
 }
 
 std::error_code octillion::RawProcessor::senddata( int fd, uint8_t* data, size_t datasize )
@@ -89,6 +91,7 @@ std::error_code octillion::RawProcessor::senddata( int fd, uint8_t* data, size_t
     LOG_D(tag_) << "senddata, fd:" << fd << " size:" << sizeof(uint32_t) + datasize;   
     error = CoreServer::get_instance().senddata( fd, (const void*)buffer, sizeof( uint32_t ) + datasize );
 
+    // to suuport memleak.h
     delete [] buffer;
     
     if ( error != OcError::E_SUCCESS )
@@ -225,7 +228,7 @@ int octillion::RawProcessor::readdata( int fd, uint8_t* data, size_t datasize, s
         if ( cmd->valid() )
         {
             LOG_D(tag_) << "readdata, add cmd to World";
-            World::get_instance().addcmd( fd, cmd );
+            World::get_instance().addcmd( cmd );
         }
         else
         {
@@ -288,7 +291,8 @@ int octillion::RawProcessor::recv( int fd, uint8_t* data, size_t datasize )
 
 void octillion::RawProcessor::disconnect( int fd )
 {    
-    World::get_instance().disconnect( fd );
+    Command* cmd = new Command(fd, Command::DISCONNECT);
+    World::get_instance().addcmd(cmd);
     
     // check fd validation, only for safety
     if ( clients_.find( fd ) == clients_.end() )

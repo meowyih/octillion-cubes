@@ -5,6 +5,10 @@
 
 #include "world/cube.hpp"
 
+#ifdef MEMORY_DEBUG
+#include "memory/memleak.hpp"
+#endif
+
 // [reserved pcid]
 // input - fd
 // output - available pcid
@@ -42,6 +46,8 @@ private:
 public:
     // login
     const static int UNKNOWN = 0;
+    const static int CONNECT = 10;
+    const static int DISCONNECT = 11;
     const static int VALIDATE_USERNAME = 13;
     const static int CONFIRM_USER = 17;
     const static int LOGIN = 19;
@@ -59,19 +65,19 @@ public:
     const static int E_CMD_WRONG_USERNAME_PASSWORD = 103;
         
 public:  
-    // set pcid to 0 if unknown
+    Command( uint32_t fd, uint32_t cmd );
     Command( uint32_t fd, uint8_t* data, size_t datasize );
 
     //destructor
     ~Command();
     
+    int fd() { return fd_; }
     uint32_t cmd() { return cmd_; }
     bool valid() { return valid_; }
     
 private:
-    uint32_t fd_;
-    uint32_t cmd_;
-    
+    int fd_;
+    uint32_t cmd_;    
     JsonTextW* json_ = NULL;
 
 public:
@@ -79,6 +85,39 @@ public:
     std::vector<int> uiparms_;
 
     bool valid_;
+
+#ifdef MEMORY_DEBUG
+public:
+    static void* operator new(size_t size)
+    {
+        void* memory = MALLOC(size);
+
+        MemleakRecorder::instance().alloc(__FILE__, __LINE__, memory);
+
+        return memory;
+    }
+
+    static void* operator new[](size_t size)
+    {
+        void* memory = MALLOC(size);
+
+        MemleakRecorder::instance().alloc(__FILE__, __LINE__, memory);
+
+        return memory;
+    }
+
+        static void operator delete(void* p)
+    {
+        MemleakRecorder::instance().release(p);
+        FREE(p);
+    }
+
+    static void operator delete[](void* p)
+    {
+        MemleakRecorder::instance().release(p);
+        FREE(p);
+    }
+#endif
 };
 
 #endif

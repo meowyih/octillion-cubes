@@ -14,6 +14,7 @@
 #include <unistd.h>
 #endif
 
+#include "jsonw/jsonw.hpp"
 #include "error/macrolog.hpp"
 #include "error/ocerror.hpp"
 #include "database/filedatabase.hpp"
@@ -240,6 +241,10 @@ std::error_code octillion::FileDatabase::create( int fd, Player* player)
     maxpcid_++;
     player->id(maxpcid_);
 
+    // set player's location
+    CubePosition loc(100000, 100000, 100000);
+    player->position(loc);
+
     item.pcid = player->id();
     item.password = player->password();
     userlist_[player->username()] = item;
@@ -259,46 +264,76 @@ std::error_code octillion::FileDatabase::load( uint32_t pcid, Player* player )
     std::string filename = pcfilename(pcid);
 
     // read file   
-    std::ifstream idxfile(filename);
-    if (idxfile.good())
+    std::wifstream wfin(filename);
+    if (wfin.good())
     {
-        // user file does not exist
-        std::string line;
+        JsonTextW json(wfin);
 
-        std::getline(idxfile, line);
-        player->username(line);
+        if (json.valid() == false)
+        {
+            LOG_E(tag_) << "fatal error, player file:" << filename << " contains invalid json data";
+            return OcError::E_DB_BAD_RECORD;
+        }
 
-        std::getline(idxfile, line);
-        player->password(line);
+        JsonValueW* jvalue = json.value();
+        JsonObjectW* jobject = jvalue->object();
 
-        std::getline(idxfile, line);
-        player->id((uint32_t)std::stoi(line));
+        if (jobject == NULL)
+        {
+            LOG_E(tag_) << "fatal error, player file:" << filename << " has no json object";
+            return OcError::E_DB_BAD_RECORD;
+        }
 
-        std::getline(idxfile, line);
-        player->cls((uint32_t)std::stoi(line));
+        // check if json is valid
+        if (jobject->find(u8"id") == NULL || jobject->find(u8"id")->type() != JsonValueW::Type::NumberInt ||
+            jobject->find(u8"username") == NULL || jobject->find(u8"username")->type() != JsonValueW::Type::String ||
+            jobject->find(u8"password") == NULL || jobject->find(u8"password")->type() != JsonValueW::Type::String ||
+            jobject->find(u8"gender") == NULL || jobject->find(u8"gender")->type() != JsonValueW::Type::NumberInt ||
+            jobject->find(u8"cls") == NULL || jobject->find(u8"cls")->type() != JsonValueW::Type::NumberInt ||
+            jobject->find(u8"con") == NULL || jobject->find(u8"con")->type() != JsonValueW::Type::NumberInt ||
+            jobject->find(u8"men") == NULL || jobject->find(u8"men")->type() != JsonValueW::Type::NumberInt ||
+            jobject->find(u8"luc") == NULL || jobject->find(u8"luc")->type() != JsonValueW::Type::NumberInt ||
+            jobject->find(u8"cha") == NULL || jobject->find(u8"cha")->type() != JsonValueW::Type::NumberInt ||
+            jobject->find(u8"loc") == NULL || jobject->find(u8"loc")->type() != JsonValueW::Type::JsonArray)
+        {
+            LOG_E(tag_) << "fatal error, player file:" << filename << " missing json members";
+            return OcError::E_DB_BAD_RECORD;
+        }
 
-        std::getline(idxfile, line);
-        player->gender((uint32_t)std::stoi(line));
+        // retrieve data
+        player->id(jobject->find(u8"id")->integer());
+        player->username(jobject->find(u8"username")->string());
+        player->password(jobject->find(u8"password")->string());
+        player->gender(jobject->find(u8"gender")->integer());
+        player->cls(jobject->find(u8"cls")->integer());
+        player->con(jobject->find(u8"con")->integer());
+        player->men(jobject->find(u8"men")->integer());
+        player->luc(jobject->find(u8"luc")->integer());
+        player->cha(jobject->find(u8"cha")->integer());
 
-        std::getline(idxfile, line);
-        player->con((uint32_t)std::stoi(line));
+        JsonArrayW* jarray = jobject->find(u8"loc")->array();
 
-        std::getline(idxfile, line);
-        player->men((uint32_t)std::stoi(line));
+        if (jarray->size() != 3 || 
+            jarray->at(0)->type() != JsonValueW::Type::NumberInt ||
+            jarray->at(1)->type() != JsonValueW::Type::NumberInt ||
+            jarray->at(2)->type() != JsonValueW::Type::NumberInt )
+        {
+            LOG_E(tag_) << "fatal error, player file:" << filename << " json has bad loc field";
+            return OcError::E_DB_BAD_RECORD;
+        }
 
-        std::getline(idxfile, line);
-        player->luc((uint32_t)std::stoi(line));
+        CubePosition loc(
+            jarray->at(0)->integer(), 
+            jarray->at(1)->integer(), 
+            jarray->at(2)->integer());
 
-        std::getline(idxfile, line);
-        player->cha((uint32_t)std::stoi(line));
+        player->position(loc);
 
-        idxfile.close();
         return OcError::E_SUCCESS;
     }
     else
     {
         // user file does not exist
-        idxfile.close();
         return OcError::E_DB_NO_RECORD;
     }
 }
@@ -312,18 +347,27 @@ std::error_code octillion::FileDatabase::save( Player* player )
 
     std::string filename = pcfilename(player->id() );
 
+    JsonObjectW* jobject = new JsonObjectW();
+    jobject->add(u8"username", player->username());
+    jobject->add(u8"password", player->password());
+    jobject->add(u8"id", (int)player->id());
+    jobject->add(u8"gender", (int)player->gender());
+    jobject->add(u8"cls", (int)player->cls());
+    jobject->add(u8"con", (int)player->con());
+    jobject->add(u8"men", (int)player->men());
+    jobject->add(u8"luc", (int)player->luc());
+    jobject->add(u8"cha", (int)player->cha());
+
+    JsonArrayW* jarray = new JsonArrayW();
+    jarray->add((int)(player->position().x()));
+    jarray->add((int)(player->position().y()));
+    jarray->add((int)(player->position().z()));
+    jobject->add(u8"loc", jarray);
+
+    JsonTextW jtext(jobject);
+
     std::ofstream pcfile(filename, std::ofstream::out | std::ofstream::trunc);
-
-    pcfile << player->username() << std::endl
-        << player->password() << std::endl;
-
-    pcfile << player->id() << std::endl
-        << player->cls() << std::endl
-        << player->gender() << std::endl
-        << player->con() << std::endl
-        << player->men() << std::endl
-        << player->luc() << std::endl
-        << player->cha() << std::endl;
+    pcfile << jtext.string();
 
     return OcError::E_SUCCESS;
 }
