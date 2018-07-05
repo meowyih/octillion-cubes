@@ -23,6 +23,9 @@ public:
     const static int TYPE_PLAYER_ARRIVE = 10;
     const static int TYPE_PLAYER_LEAVE = 20;
 
+    const static int TYPE_JSON_SIMPLE = 1;
+    const static int TYPE_JSON_DETAIL = 2;
+
 public:
     JsonObjectW* json();
 

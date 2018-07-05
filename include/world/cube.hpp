@@ -37,6 +37,8 @@ public:
     uint32_t y() { return y_axis_; }
     uint32_t z() { return z_axis_; }
 
+    JsonObjectW* json();
+
     bool operator < (const CubePosition& rhs) const
     {
         if (x_axis_ < rhs.x_axis_)
@@ -114,11 +116,17 @@ public:
 
 public:
     CubePosition loc() { return loc_; }
+    uint32_t area() { return areaid_; }
     bool addlink(Cube* dest);
     std::wstring wtitle() { return wtitle_; }
+
+    // parameter type
+    // 1 - Event::TYPE_JSON_SIMPLE, for login/logout/arrive/leave event usage
+    // 2 - Event::TYPE_JSON_DETAIL, for detail event usage
+    JsonObjectW* json(int type);
         
 private:
-    int areaid_;
+    int areaid_ = 0;
     CubePosition loc_;
     std::wstring wtitle_;
 

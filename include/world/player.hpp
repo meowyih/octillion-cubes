@@ -7,6 +7,7 @@
 #include <string>
 
 #include "world/cube.hpp"
+#include "jsonw/jsonw.hpp"
 
 #ifdef MEMORY_DEBUG
 #include "memory/memleak.hpp"
@@ -48,11 +49,6 @@ public:
         CubePosition loc, std::string username, std::string password) :
         status_(0), id_(id), gender_(gender), cls_(cls), con_(con), men_(men), luc_(luc), cha_(cha), loc_(loc),
         username_(username), password_(password) {}
-
-public:
-    // help static function to roll a player attribute based on gender and cls
-    static void roll(uint32_t gender, uint32_t cls, std::map<std::string, uint32_t>& attribute);
-    static std::string rollname();
 
 public:
     std::string username() { return username_; }
@@ -98,9 +94,11 @@ public:
         return os;
     }
 
-    void move(CubePosition loc);
+    // parameter type
+    // 1 - Event::TYPE_JSON_SIMPLE, for login/logout/arrive/leave event usage
+    // 2 - Event::TYPE_JSON_DETAIL, for detail event usage
+    JsonObjectW* json( int type );
     
-
 private:
     int fd_ = 0;
     std::string username_;

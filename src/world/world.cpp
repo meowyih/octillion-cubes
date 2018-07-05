@@ -207,7 +207,7 @@ std::error_code octillion::World::tick()
     // events created by players, map key is where the event created
     std::map<Cube*, std::list<Event*>*> plyevents;
     
-    LOG_D(tag_) << "tick start, cmds_.size:" << cmds_.size();
+    // LOG_D(tag_) << "tick start, cmds_.size:" << cmds_.size();
 
     // handle commands in cmds_
     cmds_lock_.lock();
@@ -271,12 +271,14 @@ std::error_code octillion::World::tick()
         {
             // close fd due to logout
             RawProcessor::closefd(fd);
+            delete cmdback;
             LOG_I(tag_) << "tick, request disconnect due to logout cmd";
         }
         else
         {
             // fatal error, close fd
             RawProcessor::closefd(fd);
+            delete cmdback;
             LOG_E(tag_) << "tick, failed to handle incoming command cmd:" << cmd->cmd();
         }
     }
@@ -364,7 +366,7 @@ std::error_code octillion::World::tick()
         return OcError::E_WORLD_FREEZED;
     }
 
-    LOG_D(tag_) << "tick, done";
+    // LOG_D(tag_) << "tick, done";
     return OcError::E_SUCCESS;
 }
 
@@ -496,6 +498,7 @@ std::error_code octillion::World::cmdConfirmUser(int fd, Command *cmd, JsonObjec
     }
     else
     {
+        delete player;
         LOG_E(tag_) << "cmdConfirmUser, failed to create player:" << username << ", err:" << err;
     }
 

@@ -5,6 +5,8 @@
 #include <map>
 
 #include "world/cube.hpp"
+#include "world/event.hpp"
+
 #include "jsonw/jsonw.hpp"
 #include "error/ocerror.hpp"
 #include "error/macrolog.hpp"
@@ -42,6 +44,15 @@ std::string octillion::CubePosition::str()
     std::ostringstream oss;
     oss << "(" << x_axis_ << "," << y_axis_ << "," << z_axis_ << ")";
     return oss.str();
+}
+
+octillion::JsonObjectW* octillion::CubePosition::json()
+{
+    JsonObjectW* jobject = new JsonObjectW();
+    jobject->add("x", (int)x_axis_);
+    jobject->add("y", (int)y_axis_);
+    jobject->add("z", (int)z_axis_);
+    return jobject;
 }
 
 octillion::Cube::Cube(CubePosition loc)
@@ -106,6 +117,23 @@ bool octillion::Cube::addlink(Cube* dest)
     return true;
 }
 
+// parameter type
+// 1 - Event::TYPE_JSON_SIMPLE, for login/logout/arrive/leave event usage
+// 2 - Event::TYPE_JSON_DETAIL, for detail event usage
+octillion::JsonObjectW* octillion::Cube::json(int type)
+{
+    JsonObjectW* jobject = new JsonObjectW();
+    switch (type)
+    {
+    case Event::TYPE_JSON_DETAIL:
+    case Event::TYPE_JSON_SIMPLE:
+        jobject->add("loc", loc_.json() );
+        jobject->add("area", areaid_);
+        break;
+    }
+
+    return jobject;
+}
 
 octillion::Area::Area( JsonTextW* json )
 {
