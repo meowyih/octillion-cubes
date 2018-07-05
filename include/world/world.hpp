@@ -63,25 +63,22 @@ public:
 private:
     std::error_code cmdUnknown(int fd, Command *cmd, JsonObjectW* jsonobject);
     std::error_code cmdValidateUsername(int fd, Command *cmd, JsonObjectW* jsonobject);
-    std::error_code cmdConfirmUser(int fd, Command* cmd, JsonObjectW* jsonobject, std::map<Cube*, std::list<Event*>*>& events);
-    std::error_code cmdLogin(int fd, Command* cmd, JsonObjectW* jsonobject, std::map<Cube*, std::list<Event*>*>& events );
-    std::error_code cmdLogout(int fd, Command* cmd, JsonObjectW* jsonobject, std::map<Cube*, std::list<Event*>*>& events);
+    std::error_code cmdConfirmUser(int fd, Command* cmd, JsonObjectW* jsonobject, std::list<Event*>& events);
+    std::error_code cmdLogin(int fd, Command* cmd, JsonObjectW* jsonobject, std::list<Event*>& events );
+    std::error_code cmdLogout(int fd, Command* cmd, JsonObjectW* jsonobject, std::list<Event*>& events);
     std::error_code cmdFreezeWorld(int fd, Command* cmd, JsonObjectW* jsonobject);
 
 private:
-    std::error_code connect(int fd, std::map<Cube*, std::list<Event*>*>& events);
-    std::error_code disconnect(int fd, std::map<Cube*, std::list<Event*>*>& events);
+    std::error_code connect(int fd);
+    std::error_code disconnect(int fd, std::list<Event*>& events);
 
     // enter and leave is to registry and unregistry one player to the world
     // this two function should be called after player exists in players_ map
     // players enters the world after login
-    std::error_code enter(Player* player, std::map<Cube*, std::list<Event*>*>& events);
+    std::error_code enter(Player* player, std::list<Event*>& events);
 
     // player leaves the world when logout, disconnect or the world has been destroyed
-    std::error_code leave(Player* player, std::map<Cube*, std::list<Event*>*>& events);
-
-    // help function, add one event into std::list<Event*>*>& events
-    inline void addevent( Cube* cube, Event* event, std::map<Cube*, std::list<Event*>*>& events);
+    std::error_code leave(Player* player, std::list<Event*>& events);
 
     // help function, create/add json object based on event
     inline void addjsons(Event* event, std::set<Player*>* players, std::map<int, JsonTextW*>& jsons);
@@ -91,10 +88,13 @@ private:
     std::list<Command*> cmds_; // fd and Command*
 
 private:
-    std::map<int, Player*> players_;
     std::set<Area*> areas_;
-    std::map<CubePosition, Cube*> cubes_; // shortcut to cube pointers in area_, DO NOT release it.
-    std::map<Cube*, std::set<Player*>*> cube_players_; // shortcut to the players in specific cube, DO NOT release it.
+    std::map<CubePosition, Cube*> cubes_; // shortcut to all cubes, DO NOT release the cube.
+    
+    std::map<int, Player*> players_;
+    std::set<Player*> world_players_; // shortcut to the players in the world, DO NOT release the player.
+    std::map<Cube*, std::set<Player*>*> cube_players_; // shortcut to the players in specific cube, DO NOT release the player.
+    std::map<int, std::set<Player*>*> area_players_; // shortcut to the players in specific area, DO NOT release the player.
 
 private:
     FileDatabase database_;

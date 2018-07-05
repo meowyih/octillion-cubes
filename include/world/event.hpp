@@ -17,6 +17,12 @@ namespace octillion
 class octillion::Event
 {
 public:
+    const static int RANGE_NONE = 0;
+    const static int RANGE_PRIVATE = 1;
+    const static int RANGE_CUBE = 2;
+    const static int RANGE_AREA = 3;
+    const static int RANGE_WORLD = 4;
+
     const static int TYPE_UNKNOWN = 0;
     const static int TYPE_PLAYER_LOGIN = 1;
     const static int TYPE_PLAYER_LOGOUT = 2;
@@ -29,9 +35,18 @@ public:
 public:
     JsonObjectW* json();
 
+    // player_ is an object that might be deleted after logout, so
+    // we need to make a copy in event
+    void player(const Player& player)
+    {
+        player_ = player;
+    }
+
 public:
+    int range_ = RANGE_NONE;
     int type_ = TYPE_UNKNOWN;
-    Player* player_ = NULL;
+    Player player_;
+    int areaid_;
     Cube* fromcube_ = NULL;
     Cube* tocube_ = NULL;
 

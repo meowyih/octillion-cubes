@@ -40,15 +40,50 @@ public:
     
 public:
     Player() :
-        status_(0), id_(0), gender_(0), cls_(0), con_(0), men_(0), luc_(0), cha_(0) {}
+        status_(0), id_(0), 
+        gender_(0), cls_(0), 
+        con_(0), men_(0), luc_(0), cha_(0) {}
 
     Player(uint32_t id) :
-        status_(0), id_(id), gender_(0), cls_(0), con_(0), men_(0), luc_(0), cha_(0) {}
+        status_(0), id_(id), 
+        gender_(0), cls_(0), 
+        con_(0), men_(0), luc_(0), cha_(0) {}
 
     Player(uint32_t id, uint32_t gender, uint32_t cls, uint32_t con, uint32_t men, uint32_t luc, uint32_t cha, 
         CubePosition loc, std::string username, std::string password) :
-        status_(0), id_(id), gender_(gender), cls_(cls), con_(con), men_(men), luc_(luc), cha_(cha), loc_(loc),
+        status_(0), id_(id), 
+        gender_(gender), cls_(cls), 
+        con_(con), men_(men), luc_(luc), cha_(cha), 
+        loc_(loc),
         username_(username), password_(password) {}
+
+    Player(const Player& rhs) :
+        status_(rhs.status_), id_(rhs.id_), 
+        gender_(rhs.gender_), cls_(rhs.cls_), 
+        con_(rhs.con_), men_(rhs.men_), luc_(rhs.luc_), cha_(rhs.cha_), 
+        loc_(rhs.loc_),
+        username_(rhs.username_), password_(rhs.password_) {}
+
+    Player& operator = (const Player& rhs)
+    {
+        status_ = rhs.status_;
+        id_ = rhs.id_;
+
+        gender_ = rhs.gender_;
+        cls_ = rhs.cls_;
+
+        con_ = rhs.con_;
+        men_ = rhs.men_;
+        luc_ = rhs.luc_;
+        cha_ = rhs.cha_;
+
+        loc_ = rhs.loc_;
+
+        username_ = rhs.username_;
+        password_ = rhs.password_;
+
+        return *this;
+    }
 
 public:
     std::string username() { return username_; }
@@ -63,6 +98,7 @@ public:
     uint32_t cha() { return cha_; }
     CubePosition position() { return loc_; }
     int fd() { return fd_; }
+    Cube* cube() { return cube_; }
     
     void username(std::string username) { username_ = username; }
     void password(std::string password) { password_ = password; }
@@ -76,6 +112,7 @@ public:
     void cha(uint32_t cha) { cha_ = cha;  }
     void position(CubePosition loc) { loc_ = loc; }
     void fd(int fd) { fd_ = fd; }
+    void cube(Cube* cube) { cube_ = cube; }
     
     // put implementation in header is to avoid the complexity of
     // namespace plus friend, it could be done in cpp, but I don't see any
@@ -110,6 +147,8 @@ private:
     uint32_t con_, men_, luc_, cha_;
 
     CubePosition loc_;
+
+    Cube* cube_; // shortcut to the cube_ based on loc_
 
 #ifdef MEMORY_DEBUG
 public:
