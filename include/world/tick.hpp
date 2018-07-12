@@ -16,9 +16,9 @@ class octillion::TickCallback
 {
 public:
     virtual void tickcallback( 
-        uint32_t type, 
-        uint32_t param1,
-        uint32_t param2 ) = 0;
+        uint_fast32_t type, 
+        uint_fast32_t param1,
+        uint_fast32_t param2 ) = 0;
 };
 
 // Tick definition

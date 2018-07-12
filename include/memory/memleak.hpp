@@ -18,11 +18,11 @@ private:
     class Data
     {
     public:
-        void* ptr_;
-        const char* fname_;
-        int line_;
+        void* ptr_ = NULL;
+        const char* fname_ = NULL;
+        int line_ = 0;
 
-        Data* next_;
+        Data* next_ = NULL;
     };
 
 public:
@@ -83,7 +83,7 @@ public:
             }
 
             before = anchor;
-            anchor = anchor->next_;
+            anchor = before->next_;
         }
     }
 

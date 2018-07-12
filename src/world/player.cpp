@@ -13,22 +13,22 @@
 // parameter type
 // 1 - simple, for login/logout/arrive/leave event usage
 // 2 - detail, for see event usage
-octillion::JsonObjectW* octillion::Player::json( int type )
+octillion::JsonW* octillion::Player::json( int type )
 {
-    JsonObjectW* jobject = new JsonObjectW();
+    JsonW* jobject = new JsonW();
     switch (type)
     {
     case Event::TYPE_JSON_DETAIL:
-        jobject->add("con", (int)con_);
-        jobject->add("men", (int)men_);
-        jobject->add("luc", (int)luc_);
-        jobject->add("cha", (int)cha_);
-        jobject->add("status", (int)status_);
+        jobject->add("con", con_);
+        jobject->add("men", men_);
+        jobject->add("luc", luc_);
+        jobject->add("cha", cha_);
+        jobject->add("status", status_);
 
     case Event::TYPE_JSON_SIMPLE:
         jobject->add("id", (int)id_);
-        jobject->add("gender", (int)gender_);
-        jobject->add("cls", (int)cls_);
+        jobject->add("gender", gender_);
+        jobject->add("cls", cls_);
         break;
     }
 

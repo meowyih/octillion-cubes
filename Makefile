@@ -6,7 +6,6 @@ VPATH = include \
         src/server \
         src/world \
         src/database \
-        src/jsonw \
         src/memory
 
 OBJDIR = obj
@@ -20,7 +19,6 @@ OBJS = $(addprefix $(OBJDIR)/, \
        command.o \
        world.o \
        filedatabase.o \
-       jsonw.o \
        event.o \
        memleak.o \
        )

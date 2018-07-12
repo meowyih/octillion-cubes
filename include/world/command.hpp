@@ -44,7 +44,7 @@ private:
     const std::string tag_ = "Command";
     
 public:
-    // login
+    // create player and login
     const static int UNKNOWN = 0;
     const static int CONNECT = 10;
     const static int DISCONNECT = 11;
@@ -52,6 +52,9 @@ public:
     const static int CONFIRM_USER = 17;
     const static int LOGIN = 19;
     const static int LOGOUT = 20;
+
+    // movement
+    const static int MOVE_NORMAL = 40;
 
     // TODO: only admin can freeze the entire world
     const static int FREEZE_WORLD = 2999;
@@ -65,24 +68,24 @@ public:
     const static int E_CMD_WRONG_USERNAME_PASSWORD = 103;
         
 public:  
-    Command( uint32_t fd, uint32_t cmd );
-    Command( uint32_t fd, uint8_t* data, size_t datasize );
+    Command( int fd, int cmd );
+    Command( int fd, uint8_t* data, size_t datasize );
 
     //destructor
     ~Command();
     
     int fd() { return fd_; }
-    uint32_t cmd() { return cmd_; }
+    int cmd() { return cmd_; }
     bool valid() { return valid_; }
     
 private:
     int fd_;
-    uint32_t cmd_;    
-    JsonTextW* json_ = NULL;
+    int cmd_;    
+    JsonW json_;
 
 public:
     std::vector<std::string> strparms_;
-    std::vector<int> uiparms_;
+    std::vector<uint_fast32_t> uiparms_;
 
     bool valid_;
 

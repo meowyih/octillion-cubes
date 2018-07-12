@@ -6,6 +6,7 @@
 
 #include "error/ocerror.hpp"
 #include "world/player.hpp"
+#include "world/cube.hpp"
 
 namespace octillion
 {
@@ -15,12 +16,12 @@ namespace octillion
 class octillion::Database
 {
 public:
-    virtual uint32_t pcid(std::string name) = 0;
-    virtual uint32_t login(std::string name, std::string password) = 0;
+    virtual uint_fast32_t pcid(std::string name) = 0;
+    virtual uint_fast32_t login(std::string name, std::string password) = 0;
     virtual std::string hashpassword(std::string password) = 0;
     virtual std::error_code reserve(int fd, std::string name) = 0;
-    virtual std::error_code create( int fd, Player* player) = 0;
-    virtual std::error_code load( uint32_t pcid, Player* player ) = 0;
+    virtual std::error_code create( int fd, Player* player, CubePosition& loc ) = 0;
+    virtual std::error_code load( uint_fast32_t pcid, Player* player, CubePosition& loc) = 0;
     virtual std::error_code save( Player* player ) = 0;
 };
 

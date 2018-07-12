@@ -1,0 +1,17 @@
+{
+    "id": 1,
+    "title": "control area",
+    "offset": [100000, 100000, 100000],
+    "cubes": 
+    [
+        {"loc":[0,0,0], "mark":"central", "title":"主控室"},
+        {"loc":[1,0,0], "mark":"warehouse", "title":"小倉庫"},
+        {"loc":[1,0,1], "mark":"attic", "title":"倉庫閣樓"}
+    ],
+    
+    "links":
+    [
+        {"type":2, "from":"central", "to":"warehouse"},
+        {"type":2, "from":"warehouse", "to":"attic"}
+    ]
+}

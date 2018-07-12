@@ -76,7 +76,7 @@ void octillion::FileDatabase::init(std::string directory)
         size_t count;
         std::string line;
         std::getline(idxfile, line);
-        count = (uint32_t)std::stoi(line);
+        count = (uint_fast32_t)std::stoi(line);
 
         for (size_t i = 0; i < count; i ++ )
         {
@@ -85,7 +85,7 @@ void octillion::FileDatabase::init(std::string directory)
             std::string username;
             std::getline(idxfile, username);
             std::getline(idxfile, line);
-            item.pcid = (uint32_t)std::stoi(line);
+            item.pcid = (uint_fast32_t)std::stoi(line);
             std::getline(idxfile, line);
             item.password = line;
 
@@ -116,7 +116,7 @@ void octillion::FileDatabase::init(std::string directory)
     LOG_D(tag_) << "init leave, directory_:" << directory_;
 }
 
-uint32_t octillion::FileDatabase::login(std::string name, std::string password)
+uint_fast32_t octillion::FileDatabase::login(std::string name, std::string password)
 {
     LOG_D(tag_) << "login start, name:" << name << " pwd:" << password;
 
@@ -163,7 +163,7 @@ std::error_code octillion::FileDatabase::flushidx()
     return OcError::E_SUCCESS;
 }
 
-uint32_t octillion::FileDatabase::pcid(std::string name)
+uint_fast32_t octillion::FileDatabase::pcid(std::string name)
 {
     auto it = userlist_.find(name);
 
@@ -179,7 +179,7 @@ uint32_t octillion::FileDatabase::pcid(std::string name)
 
 std::error_code octillion::FileDatabase::reserve(int fd, std::string name)
 {
-    uint32_t id = pcid(name);
+    uint_fast32_t id = pcid(name);
 
     // name already exists in database, reserve failed
     if (id != 0)
@@ -210,7 +210,7 @@ std::error_code octillion::FileDatabase::reserve(int fd, std::string name)
     return OcError::E_SUCCESS;
 }
 
-std::error_code octillion::FileDatabase::create( int fd, Player* player)
+std::error_code octillion::FileDatabase::create( int fd, Player* player, CubePosition& loc)
 {
     FileDatabaseListItem item;
     std::string username = player->username();
@@ -242,8 +242,10 @@ std::error_code octillion::FileDatabase::create( int fd, Player* player)
     player->id(maxpcid_);
 
     // set player's location
-    CubePosition loc(100000, 100000, 100000);
-    player->position(loc);
+    loc.set(
+        (uint_fast32_t)100000,
+        (uint_fast32_t)100000,
+        (uint_fast32_t)100000);
 
     item.pcid = player->id();
     item.password = player->password();
@@ -254,7 +256,7 @@ std::error_code octillion::FileDatabase::create( int fd, Player* player)
     return save(player);
 }
       
-std::error_code octillion::FileDatabase::load( uint32_t pcid, Player* player )
+std::error_code octillion::FileDatabase::load( uint_fast32_t pcid, Player* player, CubePosition& loc)
 {    
     if ( player == NULL )
     {
@@ -264,70 +266,59 @@ std::error_code octillion::FileDatabase::load( uint32_t pcid, Player* player )
     std::string filename = pcfilename(pcid);
 
     // read file   
-    std::wifstream wfin(filename);
-    if (wfin.good())
+    std::ifstream fin(filename);
+    if (fin.good())
     {
-        JsonTextW json(wfin);
+        JsonW json(fin);
 
-        if (json.valid() == false)
+        if (json.valid() == false || json.type() != JsonW::OBJECT )
         {
             LOG_E(tag_) << "fatal error, player file:" << filename << " contains invalid json data";
             return OcError::E_DB_BAD_RECORD;
         }
 
-        JsonValueW* jvalue = json.value();
-        JsonObjectW* jobject = jvalue->object();
-
-        if (jobject == NULL)
-        {
-            LOG_E(tag_) << "fatal error, player file:" << filename << " has no json object";
-            return OcError::E_DB_BAD_RECORD;
-        }
-
         // check if json is valid
-        if (jobject->find(u8"id") == NULL || jobject->find(u8"id")->type() != JsonValueW::Type::NumberInt ||
-            jobject->find(u8"username") == NULL || jobject->find(u8"username")->type() != JsonValueW::Type::String ||
-            jobject->find(u8"password") == NULL || jobject->find(u8"password")->type() != JsonValueW::Type::String ||
-            jobject->find(u8"gender") == NULL || jobject->find(u8"gender")->type() != JsonValueW::Type::NumberInt ||
-            jobject->find(u8"cls") == NULL || jobject->find(u8"cls")->type() != JsonValueW::Type::NumberInt ||
-            jobject->find(u8"con") == NULL || jobject->find(u8"con")->type() != JsonValueW::Type::NumberInt ||
-            jobject->find(u8"men") == NULL || jobject->find(u8"men")->type() != JsonValueW::Type::NumberInt ||
-            jobject->find(u8"luc") == NULL || jobject->find(u8"luc")->type() != JsonValueW::Type::NumberInt ||
-            jobject->find(u8"cha") == NULL || jobject->find(u8"cha")->type() != JsonValueW::Type::NumberInt ||
-            jobject->find(u8"loc") == NULL || jobject->find(u8"loc")->type() != JsonValueW::Type::JsonArray)
+        if (json.get(u8"id") == NULL || json.get(u8"id")->type() != JsonW::INTEGER ||
+            json.get(u8"username") == NULL || json.get(u8"username")->type() != JsonW::STRING ||
+            json.get(u8"password") == NULL || json.get(u8"password")->type() != JsonW::STRING ||
+            json.get(u8"gender") == NULL || json.get(u8"gender")->type() != JsonW::INTEGER ||
+            json.get(u8"cls") == NULL || json.get(u8"cls")->type() != JsonW::INTEGER ||
+            json.get(u8"con") == NULL || json.get(u8"con")->type() != JsonW::INTEGER ||
+            json.get(u8"men") == NULL || json.get(u8"men")->type() != JsonW::INTEGER ||
+            json.get(u8"luc") == NULL || json.get(u8"luc")->type() != JsonW::INTEGER ||
+            json.get(u8"cha") == NULL || json.get(u8"cha")->type() != JsonW::INTEGER ||
+            json.get(u8"loc") == NULL || json.get(u8"loc")->type() != JsonW::ARRAY)
         {
             LOG_E(tag_) << "fatal error, player file:" << filename << " missing json members";
             return OcError::E_DB_BAD_RECORD;
         }
 
         // retrieve data
-        player->id(jobject->find(u8"id")->integer());
-        player->username(jobject->find(u8"username")->string());
-        player->password(jobject->find(u8"password")->string());
-        player->gender(jobject->find(u8"gender")->integer());
-        player->cls(jobject->find(u8"cls")->integer());
-        player->con(jobject->find(u8"con")->integer());
-        player->men(jobject->find(u8"men")->integer());
-        player->luc(jobject->find(u8"luc")->integer());
-        player->cha(jobject->find(u8"cha")->integer());
+        player->id((uint_fast32_t)(json.get(u8"id")->integer()));
+        player->username(json.get(u8"username")->str());
+        player->password(json.get(u8"password")->str());
+        player->gender((uint_fast32_t)json.get(u8"gender")->integer());
+        player->cls((uint_fast32_t)json.get(u8"cls")->integer());
+        player->con((uint_fast32_t)json.get(u8"con")->integer());
+        player->men((uint_fast32_t)json.get(u8"men")->integer());
+        player->luc((uint_fast32_t)json.get(u8"luc")->integer());
+        player->cha((uint_fast32_t)json.get(u8"cha")->integer());
 
-        JsonArrayW* jarray = jobject->find(u8"loc")->array();
+        JsonW* jloc = json.get(u8"loc");
 
-        if (jarray->size() != 3 || 
-            jarray->at(0)->type() != JsonValueW::Type::NumberInt ||
-            jarray->at(1)->type() != JsonValueW::Type::NumberInt ||
-            jarray->at(2)->type() != JsonValueW::Type::NumberInt )
+        if (jloc->size() != 3 ||
+            jloc->get(0)->type() != JsonW::INTEGER ||
+            jloc->get(1)->type() != JsonW::INTEGER ||
+            jloc->get(2)->type() != JsonW::INTEGER)
         {
             LOG_E(tag_) << "fatal error, player file:" << filename << " json has bad loc field";
             return OcError::E_DB_BAD_RECORD;
         }
 
-        CubePosition loc(
-            jarray->at(0)->integer(), 
-            jarray->at(1)->integer(), 
-            jarray->at(2)->integer());
-
-        player->position(loc);
+        loc.set(
+            (uint_fast32_t) jloc->get(0)->integer(),
+            (uint_fast32_t) jloc->get(1)->integer(),
+            (uint_fast32_t) jloc->get(2)->integer());
 
         return OcError::E_SUCCESS;
     }
@@ -347,7 +338,7 @@ std::error_code octillion::FileDatabase::save( Player* player )
 
     std::string filename = pcfilename(player->id() );
 
-    JsonObjectW* jobject = new JsonObjectW();
+    JsonW* jobject = new JsonW();
     jobject->add(u8"username", player->username());
     jobject->add(u8"password", player->password());
     jobject->add(u8"id", (int)player->id());
@@ -358,21 +349,21 @@ std::error_code octillion::FileDatabase::save( Player* player )
     jobject->add(u8"luc", (int)player->luc());
     jobject->add(u8"cha", (int)player->cha());
 
-    JsonArrayW* jarray = new JsonArrayW();
-    jarray->add((int)(player->position().x()));
-    jarray->add((int)(player->position().y()));
-    jarray->add((int)(player->position().z()));
-    jobject->add(u8"loc", jarray);
-
-    JsonTextW jtext(jobject);
+    JsonW* jloc = new JsonW();
+    jloc->add((long long)(player->cube()->loc().x()));
+    jloc->add((long long)(player->cube()->loc().y()));
+    jloc->add((long long)(player->cube()->loc().z()));
+    jobject->add(u8"loc", jloc);
 
     std::ofstream pcfile(filename, std::ofstream::out | std::ofstream::trunc);
-    pcfile << jtext.string();
+    pcfile << (jobject->text(false));
+
+    delete jobject;
 
     return OcError::E_SUCCESS;
 }
 
-std::string octillion::FileDatabase::pcfilename( uint32_t pcid )
+std::string octillion::FileDatabase::pcfilename( uint_fast32_t pcid )
 {
     std::ostringstream stringStream;    
     stringStream << directory_ << pplprefix_ << pcid;

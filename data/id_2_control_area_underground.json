@@ -1,0 +1,20 @@
+{
+    "id": 2,
+    "title": "control area underground",
+    "offset": [100000, 100000, 100001],
+    "cubes": 
+    [
+        {"loc":[0,0,0], "mark":"under00", "title":"地下室"},
+        {"loc":[1,0,0], "mark":"under10", "title":"地下室"},
+        {"loc":[0,1,0], "mark":"under01", "title":"地下室"},
+        {"loc":[1,1,0], "mark":"under11", "title":"地下室"}
+    ],
+    
+    "links":
+    [
+        {"type":2, "from":"under00", "to":"under10"},
+        {"type":2, "from":"under00", "to":"under01"},
+        {"type":2, "from":"under11", "to":"under10"},
+        {"type":2, "from":"under11", "to":"under01"}
+    ]
+}

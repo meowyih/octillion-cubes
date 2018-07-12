@@ -32,7 +32,7 @@ class octillion::RawProcessorClient
         
         int fd_;
         
-        uint32_t headersize_;
+        size_t headersize_;
         uint8_t header_[kRawProcessorHeaderSize]; 
         
         size_t keysize_;

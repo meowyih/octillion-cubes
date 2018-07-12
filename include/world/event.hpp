@@ -27,13 +27,13 @@ public:
     const static int TYPE_PLAYER_LOGIN = 1;
     const static int TYPE_PLAYER_LOGOUT = 2;
     const static int TYPE_PLAYER_ARRIVE = 10;
-    const static int TYPE_PLAYER_LEAVE = 20;
+    const static int TYPE_PLAYER_LEAVE = 11;
 
     const static int TYPE_JSON_SIMPLE = 1;
     const static int TYPE_JSON_DETAIL = 2;
 
 public:
-    JsonObjectW* json();
+    JsonW* json();
 
     // player_ is an object that might be deleted after logout, so
     // we need to make a copy in event
@@ -47,8 +47,9 @@ public:
     int type_ = TYPE_UNKNOWN;
     Player player_;
     int areaid_;
-    Cube* fromcube_ = NULL;
-    Cube* tocube_ = NULL;
+    Cube* eventcube_ = NULL;
+    Cube* subcube_ = NULL;
+    int direction_;
 
 #ifdef MEMORY_DEBUG
 public:

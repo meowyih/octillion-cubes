@@ -21,7 +21,7 @@ namespace octillion
 class octillion::FileDatabaseListItem
 {
 public:
-    uint32_t pcid;
+    uint_fast32_t pcid;
     std::string password;
 };
 
@@ -36,12 +36,12 @@ public:
 
     void init(std::string directory);
     
-    virtual uint32_t pcid(std::string name) override; 
-    virtual uint32_t login(std::string name, std::string password) override;
+    virtual uint_fast32_t pcid(std::string name) override; 
+    virtual uint_fast32_t login(std::string name, std::string password) override;
     virtual std::string hashpassword(std::string password) override;
     virtual std::error_code reserve(int fd, std::string name) override;
-    virtual std::error_code create( int fd, Player* player) override;
-    virtual std::error_code load( uint32_t pcid, Player* player ) override;
+    virtual std::error_code create( int fd, Player* player, CubePosition& loc) override;
+    virtual std::error_code load( uint_fast32_t pcid, Player* player, CubePosition& loc) override;
     virtual std::error_code save( Player* player ) override;
     
 private:
@@ -49,11 +49,11 @@ private:
     const static std::string pplprefix_;
     
     std::string idxfilename();
-    std::string pcfilename( uint32_t pcid );
+    std::string pcfilename( uint_fast32_t pcid );
     std::string directory_;
     
     std::error_code flushidx();
-    uint32_t maxpcid_;
+    uint_fast32_t maxpcid_;
 
     std::map<std::string, FileDatabaseListItem> userlist_;
     std::map<int, std::string> reservelist_;

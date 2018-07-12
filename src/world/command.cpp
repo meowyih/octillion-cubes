@@ -14,7 +14,7 @@
 #include "database/database.hpp"
 #include "jsonw/jsonw.hpp"
 
-octillion::Command::Command(uint32_t fd, uint32_t cmd)
+octillion::Command::Command(int fd, int cmd)
 {
     switch (cmd)
     {
@@ -30,119 +30,114 @@ octillion::Command::Command(uint32_t fd, uint32_t cmd)
     cmd_ = cmd;
 }
 
-octillion::Command::Command( uint32_t fd, uint8_t* data, size_t datasize )
+octillion::Command::Command( int fd, uint8_t* data, size_t datasize )
 {
     uint8_t* buf = data;
-    size_t minsize = sizeof(uint32_t); // data should at least have 1 cmd
+    size_t minsize = sizeof(uint_fast32_t); // data should at least have 1 cmd
     size_t remaindata = datasize;
-    int uiparm;
+    uint_fast32_t uiparm;
     std::string strparm;
-    JsonValueW* jsonvalue;
 
     LOG_D( tag_ ) << "constructor, datasize:" << datasize;
     fd_ = fd;
     valid_ = false;
     cmd_ = UNKNOWN;
 
-    json_ = new JsonTextW((const char*)data, datasize);
+    json_.json((const char*)data, datasize);
 
     // valid command must be a valid json text
-    if (!json_->valid())
+    if ( json_.valid() == false )
     {
         LOG_E(tag_) << "cons, json invalid";
         return;
     }
 
     // valid command must contains one and only one json object
-    if (json_->value()->type() != JsonValueW::Type::JsonObject)
+    if (json_.type() != JsonW::OBJECT)
     {
-        LOG_E(tag_) << "cons, json is no an object: " << json_->string();
+        LOG_E(tag_) << "cons, json is no an object: " << json_;
         return;
     }
 
     // valid command must contains "cmd" name-value pair as integer
-    JsonObjectW* object = json_->value()->object();
-    jsonvalue = object->find(u8"cmd");
-    if ( jsonvalue == NULL || jsonvalue->type() != JsonValueW::Type::NumberInt )
+    JsonW* jcmd = json_.get(u8"cmd");
+    JsonW* jvalue;
+    if (jcmd == NULL || jcmd->type() != JsonW::INTEGER )
     {
-        LOG_E(tag_) << "cons, json's object has no cmd: " << json_->string();
+        LOG_E(tag_) << "cons, json's object has no cmd: " << json_;
         return;
     }
 
-    cmd_ = jsonvalue->integer();
+    cmd_ = (int)(jcmd->integer());
     
     switch( cmd_ )
     {
     case VALIDATE_USERNAME:
-        jsonvalue = object->find(u8"s1");
-        if (jsonvalue == NULL || jsonvalue->type() != JsonValueW::Type::String)
+        jvalue = json_.get(u8"s1");
+        if (jvalue == NULL || jvalue->type() != JsonW::STRING)
         {
-            LOG_E(tag_) << "cons, cmd VALIDATE_USERNAME has no s1" << json_->string();
+            LOG_E(tag_) << "cons, cmd VALIDATE_USERNAME has no s1" << json_;
             return;
         }
 
-        strparm = jsonvalue->string();
+        strparm = jvalue->str();
 
         if (strparm.length() < 5 )
         {
-            LOG_E(tag_) << "cons, cmd VALIDATE_USERNAME contains str that too short" << json_->string();
+            LOG_E(tag_) << "cons, cmd VALIDATE_USERNAME contains str that too short" << json_;
             return;
         }
 
-        strparms_.push_back(jsonvalue->string());
+        strparms_.push_back(strparm);
         valid_ = true;
         break;
 
     case CONFIRM_USER:
         // username
-        jsonvalue = object->find(u8"s1");
-        
-        if (jsonvalue == NULL || jsonvalue->type() != JsonValueW::Type::String)
+        jvalue = json_.get(u8"s1");
+        if (jvalue == NULL || jvalue->type() != JsonW::STRING)
         {
-            LOG_E(tag_) << "cons, cmd CONFIRM_CHARACTER has no s1" << json_->string();
+            LOG_E(tag_) << "cons, cmd CONFIRM_CHARACTER has no s1" << json_;
             return;
         }
 
-        strparm = jsonvalue->string();
+        strparm = jvalue->str();
 
         if (strparm.length() < 5)
         {
-            LOG_E(tag_) << "cons, cmd CONFIRM_CHARACTER contains s1 that too short" << json_->string();
+            LOG_E(tag_) << "cons, cmd CONFIRM_CHARACTER contains s1 that too short" << json_;
             return;
         }
 
-        strparms_.push_back(jsonvalue->string());
+        strparms_.push_back(strparm);
 
         // password
-        jsonvalue = object->find(u8"s2");
-
-        if (jsonvalue == NULL || jsonvalue->type() != JsonValueW::Type::String)
+        jvalue = json_.get(u8"s2");
+        if (jvalue == NULL || jvalue->type() != JsonW::STRING)
         {
-            LOG_E(tag_) << "cons, cmd CONFIRM_CHARACTER has no s2" << json_->string();
+            LOG_E(tag_) << "cons, cmd CONFIRM_CHARACTER has no s2" << json_;
             return;
         }
 
-        strparm = jsonvalue->string();
+        strparm = jvalue->str();
 
         if (strparm.length() < 5)
         {
-            LOG_E(tag_) << "cons, cmd CONFIRM_CHARACTER contains s2 that too short" << json_->string();
+            LOG_E(tag_) << "cons, cmd CONFIRM_CHARACTER contains s2 that too short" << json_;
             return;
         }
 
-        strparms_.push_back(jsonvalue->string());
+        strparms_.push_back(strparm);
 
         // gender
-        jsonvalue = object->find(u8"i1");
-        
-
-        if (jsonvalue == NULL || jsonvalue->type() != JsonValueW::Type::NumberInt)
+        jvalue = json_.get(u8"i1");
+        if (jvalue == NULL || jvalue->type() != JsonW::INTEGER)
         {
-            LOG_E(tag_) << "cons, cmd CONFIRM_CHARACTER has no i1" << json_->string();
+            LOG_E(tag_) << "cons, cmd CONFIRM_CHARACTER has no i1" << json_;
             return;
         }
 
-        uiparm = jsonvalue->integer();
+        uiparm = (uint_fast32_t)(jvalue->integer());
         if (uiparm != Player::GENDER_FEMALE && uiparm != Player::GENDER_MALE && uiparm != Player::GENDER_NEUTRAL)
         {
             LOG_E(tag_) << "cons, cmd CONFIRM_CHARACTER contain invalid gender:" << uiparm;
@@ -152,16 +147,15 @@ octillion::Command::Command( uint32_t fd, uint8_t* data, size_t datasize )
         uiparms_.push_back(uiparm);
 
         // class
-        jsonvalue = object->find(u8"i2");
+        jvalue = json_.get(u8"i2");
 
-        if (jsonvalue == NULL || jsonvalue->type() != JsonValueW::Type::NumberInt)
+        if (jvalue == NULL || jvalue->type() != JsonW::INTEGER)
         {
-            LOG_E(tag_) << "cons, cmd CONFIRM_CHARACTER has no i2" << json_->string();
+            LOG_E(tag_) << "cons, cmd CONFIRM_CHARACTER has no i2" << json_;
             return;
         }
 
-        uiparm = jsonvalue->integer();
-
+        uiparm = (uint_fast32_t)(jvalue->integer());
         if (uiparm != Player::CLS_BELIEVER && uiparm != Player::CLS_SKILLER)
         {
             LOG_E(tag_) << "cons, cmd CONFIRM_CHARACTER contain invalid cls:" << uiparm;
@@ -173,46 +167,66 @@ octillion::Command::Command( uint32_t fd, uint8_t* data, size_t datasize )
         break;
     case LOGIN:
         // username
-        jsonvalue = object->find(u8"s1");
+        jvalue = json_.get(u8"s1");
         
-        if (jsonvalue == NULL || jsonvalue->type() != JsonValueW::Type::String)
+        if (jvalue == NULL || jvalue->type() != JsonW::STRING)
         {
-            LOG_E(tag_) << "cons, cmd LOGIN has no s1" << json_->string();
+            LOG_E(tag_) << "cons, cmd LOGIN has no s1" << json_;
             return;
         }
 
-        strparm = jsonvalue->string();
+        strparm = jvalue->str();
 
         if (strparm.length() < 5)
         {
-            LOG_E(tag_) << "cons, cmd LOGIN contains s1 that too short" << json_->string();
+            LOG_E(tag_) << "cons, cmd LOGIN contains s1 that too short" << json_;
             return;
         }
 
-        strparms_.push_back(jsonvalue->string());
+        strparms_.push_back(jvalue->str());
 
         // password
-        jsonvalue = object->find(u8"s2");
-
-        if (jsonvalue == NULL || jsonvalue->type() != JsonValueW::Type::String)
+        jvalue = json_.get(u8"s2");
+        if (jvalue == NULL || jvalue->type() != JsonW::STRING)
         {
-            LOG_E(tag_) << "cons, cmd LOGIN has no s2" << json_->string();
+            LOG_E(tag_) << "cons, cmd LOGIN has no s2" << json_;
             return;
         }
 
-        strparm = jsonvalue->string();
+        strparm = jvalue->str();
 
         if (strparm.length() < 5)
         {
-            LOG_E(tag_) << "cons, cmd LOGIN contains s2 that too short" << json_->string();
+            LOG_E(tag_) << "cons, cmd LOGIN contains s2 that too short" << json_;
             return;
         }
 
-        strparms_.push_back(jsonvalue->string());
+        strparms_.push_back(strparm);
         valid_ = true;
         break;       
 
     case LOGOUT:
+        valid_ = true;
+        break;
+
+    case MOVE_NORMAL:
+        // direction
+        jvalue = json_.get(u8"i1");
+        if (jvalue == NULL || jvalue->type() != JsonW::INTEGER)
+        {
+            LOG_E(tag_) << "cons, cmd MOVE_NORMAL has no i1" << json_;
+            return;
+        }
+
+        uiparm = (uint_fast32_t)(jvalue->integer());
+        if (uiparm != Cube::X_INC && uiparm != Cube::Y_INC && uiparm != Cube::Z_INC &&
+            uiparm != Cube::X_DEC && uiparm != Cube::Y_DEC && uiparm != Cube::Z_DEC )
+        {
+            LOG_E(tag_) << "cons, cmd MOVE_NORMAL contain invalid direction:" << uiparm;
+            return;
+        }
+
+        uiparms_.push_back(uiparm);
         valid_ = true;
         break;
 
@@ -228,8 +242,4 @@ octillion::Command::Command( uint32_t fd, uint8_t* data, size_t datasize )
 
 octillion::Command::~Command()
 {
-    if (json_ != NULL)
-    {
-        delete json_;
-    }
 }

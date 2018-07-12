@@ -24,19 +24,15 @@ namespace octillion
 
 class octillion::Player
 {
-public:
-    const static uint32_t STATUS_ABANDON = 0;
-    const static uint32_t STATUS_CREATING = 1;
-    const static uint32_t STATUS_LOGIN_CONNECT = 2;
-    const static uint32_t STATUS_LOGIN_DISCONNECT = 3;
-    const static uint32_t STATUS_LOGOUT = 4;
-  
-    const static uint32_t GENDER_NEUTRAL = 0;
-    const static uint32_t GENDER_MALE = 1;
-    const static uint32_t GENDER_FEMALE = 2;
+public: 
+    // Gender
+    const static int GENDER_NEUTRAL = 0;
+    const static int GENDER_MALE = 1;
+    const static int GENDER_FEMALE = 2;
 
-    const static uint32_t CLS_SKILLER = 1;
-    const static uint32_t CLS_BELIEVER = 2;
+    // Class
+    const static int CLS_SKILLER = 1;
+    const static int CLS_BELIEVER = 2;
     
 public:
     Player() :
@@ -44,24 +40,25 @@ public:
         gender_(0), cls_(0), 
         con_(0), men_(0), luc_(0), cha_(0) {}
 
-    Player(uint32_t id) :
+    Player(uint_fast32_t id) :
         status_(0), id_(id), 
         gender_(0), cls_(0), 
         con_(0), men_(0), luc_(0), cha_(0) {}
 
-    Player(uint32_t id, uint32_t gender, uint32_t cls, uint32_t con, uint32_t men, uint32_t luc, uint32_t cha, 
-        CubePosition loc, std::string username, std::string password) :
+    Player(uint_fast32_t id, 
+        int gender, int cls, 
+        int con, int men, int luc, int cha,
+        std::string username, std::string password) :
         status_(0), id_(id), 
         gender_(gender), cls_(cls), 
         con_(con), men_(men), luc_(luc), cha_(cha), 
-        loc_(loc),
         username_(username), password_(password) {}
 
     Player(const Player& rhs) :
         status_(rhs.status_), id_(rhs.id_), 
         gender_(rhs.gender_), cls_(rhs.cls_), 
         con_(rhs.con_), men_(rhs.men_), luc_(rhs.luc_), cha_(rhs.cha_), 
-        loc_(rhs.loc_),
+        cube_(rhs.cube_),
         username_(rhs.username_), password_(rhs.password_) {}
 
     Player& operator = (const Player& rhs)
@@ -77,7 +74,7 @@ public:
         luc_ = rhs.luc_;
         cha_ = rhs.cha_;
 
-        loc_ = rhs.loc_;
+        cube_ = rhs.cube_;
 
         username_ = rhs.username_;
         password_ = rhs.password_;
@@ -88,29 +85,27 @@ public:
 public:
     std::string username() { return username_; }
     std::string password() { return password_; }
-    uint32_t status() { return status_; }
-    uint32_t id() { return id_; }
-    uint32_t cls() { return cls_; }
-    uint32_t gender() { return gender_; }
-    uint32_t con() { return con_; }
-    uint32_t men() { return men_ ; }
-    uint32_t luc() { return luc_; }
-    uint32_t cha() { return cha_; }
-    CubePosition position() { return loc_; }
+    int status() { return status_; }
+    uint_fast32_t id() { return id_; }
+    int cls() { return cls_; }
+    int gender() { return gender_; }
+    int con() { return con_; }
+    int men() { return men_ ; }
+    int luc() { return luc_; }
+    int cha() { return cha_; }
     int fd() { return fd_; }
     Cube* cube() { return cube_; }
     
     void username(std::string username) { username_ = username; }
     void password(std::string password) { password_ = password; }
-    void status(uint32_t status) { status_ = status; }
-    void id(uint32_t id) { id_ = id; }
-    void cls(uint32_t cls) { cls_ = cls; }
-    void gender(uint32_t gender) { gender_ = gender; }
-    void con(uint32_t con) { con_ = con; }
-    void men(uint32_t men) { men_ = men; }
-    void luc(uint32_t luc) { luc_ = luc; }
-    void cha(uint32_t cha) { cha_ = cha;  }
-    void position(CubePosition loc) { loc_ = loc; }
+    void status(int status) { status_ = status; }
+    void id(uint_fast32_t id) { id_ = id; }
+    void cls(int cls) { cls_ = cls; }
+    void gender(int gender) { gender_ = gender; }
+    void con(int con) { con_ = con; }
+    void men(int men) { men_ = men; }
+    void luc(int luc) { luc_ = luc; }
+    void cha(int cha) { cha_ = cha;  }
     void fd(int fd) { fd_ = fd; }
     void cube(Cube* cube) { cube_ = cube; }
     
@@ -134,21 +129,19 @@ public:
     // parameter type
     // 1 - Event::TYPE_JSON_SIMPLE, for login/logout/arrive/leave event usage
     // 2 - Event::TYPE_JSON_DETAIL, for detail event usage
-    JsonObjectW* json( int type );
+    JsonW* json( int type );
     
 private:
     int fd_ = 0;
     std::string username_;
     std::string password_;
-    uint32_t status_;
-    uint32_t id_;
-    uint32_t cls_;
-    uint32_t gender_;
-    uint32_t con_, men_, luc_, cha_;
+    int status_;
+    uint_fast32_t id_;
+    int cls_;
+    int gender_;
+    int con_, men_, luc_, cha_;
 
-    CubePosition loc_;
-
-    Cube* cube_; // shortcut to the cube_ based on loc_
+    Cube* cube_; // shortcut to the cube_
 
 #ifdef MEMORY_DEBUG
 public:

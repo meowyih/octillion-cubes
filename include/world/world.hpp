@@ -9,7 +9,6 @@
 #include "error/macrolog.hpp"
 #include "error/ocerror.hpp"
 
-#include "world/tick.hpp"
 #include "world/cube.hpp"
 #include "world/player.hpp"
 #include "world/command.hpp"
@@ -29,7 +28,7 @@ namespace octillion
     class World;
 }
 
-class octillion::World : octillion::Tick, octillion::TickCallback
+class octillion::World
 {
 private:
     const static std::string tag_;
@@ -54,19 +53,22 @@ public:
     void addcmd(Command* cmd);
 
 public:
-    virtual std::error_code tick() override;
-    virtual void tickcallback(
-        uint32_t type,
-        uint32_t param1,
-        uint32_t param2) override;
+    std::error_code tick();
 
 private:
-    std::error_code cmdUnknown(int fd, Command *cmd, JsonObjectW* jsonobject);
-    std::error_code cmdValidateUsername(int fd, Command *cmd, JsonObjectW* jsonobject);
-    std::error_code cmdConfirmUser(int fd, Command* cmd, JsonObjectW* jsonobject, std::list<Event*>& events);
-    std::error_code cmdLogin(int fd, Command* cmd, JsonObjectW* jsonobject, std::list<Event*>& events );
-    std::error_code cmdLogout(int fd, Command* cmd, JsonObjectW* jsonobject, std::list<Event*>& events);
-    std::error_code cmdFreezeWorld(int fd, Command* cmd, JsonObjectW* jsonobject);
+    std::error_code cmdUnknown(int fd, Command *cmd, JsonW* jsonobject);
+    
+    // create and login/logout
+    std::error_code cmdValidateUsername(int fd, Command *cmd, JsonW* jsonobject);
+    std::error_code cmdConfirmUser(int fd, Command* cmd, JsonW* jsonobject, std::list<Event*>& events);
+    std::error_code cmdLogin(int fd, Command* cmd, JsonW* jsonobject, std::list<Event*>& events );
+    std::error_code cmdLogout(int fd, Command* cmd, JsonW* jsonobject, std::list<Event*>& events);
+
+    // move
+    std::error_code cmdMove(int fd, Command* cmd, JsonW* jsonobject, std::list<Event*>& events);
+
+    // god's command
+    std::error_code cmdFreezeWorld(int fd, Command* cmd, JsonW* jsonobject);
 
 private:
     std::error_code connect(int fd);
@@ -81,7 +83,11 @@ private:
     std::error_code leave(Player* player, std::list<Event*>& events);
 
     // help function, create/add json object based on event
-    inline void addjsons(Event* event, std::set<Player*>* players, std::map<int, JsonTextW*>& jsons);
+    inline void addjsons(Event* event, std::set<Player*>* players, std::map<int, JsonW*>& jsons);
+
+    // help function, move player location and change cube_players_, and area_players_
+    // function WILL NOT check the newloc's existence
+    inline void move(Player* player, Cube* cube_to);
 
 private:
     std::mutex cmds_lock_;
