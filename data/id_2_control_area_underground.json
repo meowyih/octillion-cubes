@@ -1,10 +1,10 @@
 {
     "id": 2,
     "title": "control area underground",
-    "offset": [100000, 100000, 100001],
+    "offset": [100000, 100000, 99999],
     "cubes": 
     [
-        {"loc":[0,0,0], "mark":"under00", "title":"地下室"},
+        {"loc":[0,0,0], "mark":"under00", "title":"地下室", "attr":["nomob", "nonpc"]},
         {"loc":[1,0,0], "mark":"under10", "title":"地下室"},
         {"loc":[0,1,0], "mark":"under01", "title":"地下室"},
         {"loc":[1,1,0], "mark":"under11", "title":"地下室"}
@@ -12,9 +12,38 @@
     
     "links":
     [
-        {"type":2, "from":"under00", "to":"under10"},
-        {"type":2, "from":"under00", "to":"under01"},
-        {"type":2, "from":"under11", "to":"under10"},
-        {"type":2, "from":"under11", "to":"under01"}
+        {"type":"1way", "from":"under00", "to":"under10"},
+		{"type":"1way", "from":"under10", "to":"under00"},
+		{"type":"1way", "from":"under00", "to":"under01"},
+		{"type":"1way", "from":"under01", "to":"under00"},
+		
+        {"type":"2way", "from":"under11", "to":"under10"},
+        {"type":"2way", "from":"under11", "to":"under01"}
+    ],
+    
+    "mobs":
+    [
+        {
+            "level": 1,
+            "race": 1,
+            "subrace": 0,            
+            "loc": "under00"
+        },
+        {
+            "level": 1,
+            "race": 1,
+            "subrace": 0,
+            "loc": "under00", 
+			"short": "custom mob",
+			"combat_type" : 3,
+			"random": true,
+            "path":
+            [
+                "under00",
+                "under01",
+                "under11",
+                "under10"
+            ]
+        }
     ]
 }

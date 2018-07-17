@@ -24,6 +24,9 @@ namespace octillion
 
 class octillion::Player
 {
+private:
+    const std::string tag_ = "Player";
+
 public: 
     // Gender
     const static int GENDER_NEUTRAL = 0;
@@ -33,7 +36,10 @@ public:
     // Class
     const static int CLS_SKILLER = 1;
     const static int CLS_BELIEVER = 2;
-    
+
+	// status
+	const static int STATUS_IDLE = 0;
+	const static int STATUS_COMBAT = 1;
 public:
     Player() :
         status_(0), id_(0), 
@@ -54,7 +60,7 @@ public:
         con_(con), men_(men), luc_(luc), cha_(cha), 
         username_(username), password_(password) {}
 
-    Player(const Player& rhs) :
+    explicit Player(const Player& rhs) :
         status_(rhs.status_), id_(rhs.id_), 
         gender_(rhs.gender_), cls_(rhs.cls_), 
         con_(rhs.con_), men_(rhs.men_), luc_(rhs.luc_), cha_(rhs.cha_), 
@@ -73,11 +79,14 @@ public:
         men_ = rhs.men_;
         luc_ = rhs.luc_;
         cha_ = rhs.cha_;
-
+		hp_ = rhs.hp_;
         cube_ = rhs.cube_;
 
         username_ = rhs.username_;
         password_ = rhs.password_;
+
+		fd_ = rhs.fd_;
+		target_ = rhs.target_;
 
         return *this;
     }
@@ -93,8 +102,12 @@ public:
     int men() { return men_ ; }
     int luc() { return luc_; }
     int cha() { return cha_; }
+	int lvl() { return lvl_; }
+	uint_fast32_t hp() { return hp_; }
+	void* target() { return target_; }
     int fd() { return fd_; }
     Cube* cube() { return cube_; }
+	Cube* cube_reborn() { return cube_reborn_; }
     
     void username(std::string username) { username_ = username; }
     void password(std::string password) { password_ = password; }
@@ -106,8 +119,12 @@ public:
     void men(int men) { men_ = men; }
     void luc(int luc) { luc_ = luc; }
     void cha(int cha) { cha_ = cha;  }
+	void lvl(int lvl) { lvl_ = lvl; }
+	void hp(uint_fast32_t hp) { hp_ = hp; }
+	void target( void* mob ) { target_ = mob; }
     void fd(int fd) { fd_ = fd; }
     void cube(Cube* cube) { cube_ = cube; }
+	void cube_reborn(Cube* cube) { cube_reborn_ = cube; }
     
     // put implementation in header is to avoid the complexity of
     // namespace plus friend, it could be done in cpp, but I don't see any
@@ -140,8 +157,13 @@ private:
     int cls_;
     int gender_;
     int con_, men_, luc_, cha_;
+	int lvl_;
 
-    Cube* cube_; // shortcut to the cube_
+	uint_fast32_t hp_ = 10;
+    void* target_; // a Mob
+    
+	Cube* cube_; // shortcut to the cube_
+	Cube* cube_reborn_;
 
 #ifdef MEMORY_DEBUG
 public:

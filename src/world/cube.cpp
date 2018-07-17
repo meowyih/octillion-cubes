@@ -3,6 +3,7 @@
 #include <cstring> // memset
 #include <system_error>
 #include <map>
+#include <cstdlib> // rand()
 
 #include "world/cube.hpp"
 #include "world/event.hpp"
@@ -91,11 +92,12 @@ octillion::Cube::Cube(const CubePosition& loc)
     std::memset( exits_, 0, sizeof exits_);
 }
 
-octillion::Cube::Cube(const CubePosition& loc, const std::string& title, int areaid)
+octillion::Cube::Cube(const CubePosition& loc, const std::string& title, int areaid, uint_fast32_t attr)
 {
     loc_ = loc;
     title_ = title;   
     areaid_ = areaid;
+	attr_ = attr;
     std::memset( exits_, 0, sizeof exits_);
 }
 
@@ -104,6 +106,7 @@ octillion::Cube::Cube( const Cube& rhs )
     loc_ = rhs.loc_;
     title_ = rhs.title_;   
     areaid_ = rhs.areaid_;
+	attr_ = rhs.attr_;
     std::memcpy( exits_, rhs.exits_, sizeof exits_);
 }
 
@@ -111,39 +114,44 @@ octillion::Cube::~Cube()
 {
 }
 
+bool octillion::Cube::addlink(Cube* dest, uint_fast32_t attr)
+{
+	CubePosition to = dest->loc();
+	if (to.x() == loc_.x() + 1 && to.y() == loc_.y() && to.z() == loc_.z())
+	{
+		exits_[X_INC] = attr;
+	}
+	else if (to.x() == loc_.x() - 1 && to.y() == loc_.y() && to.z() == loc_.z())
+	{
+		exits_[X_DEC] = attr;
+	}
+	else if (to.x() == loc_.x() && to.y() == loc_.y() + 1 && to.z() == loc_.z())
+	{
+		exits_[Y_INC] = attr;
+	}
+	else if (to.x() == loc_.x() && to.y() == loc_.y() - 1 && to.z() == loc_.z())
+	{
+		exits_[Y_DEC] = attr;
+	}
+	else if (to.x() == loc_.x() && to.y() == loc_.y() && to.z() == loc_.z() + 1)
+	{
+		exits_[Z_INC] = attr;
+	}
+	else if (to.x() == loc_.x() && to.y() == loc_.y() && to.z() == loc_.z() - 1)
+	{
+		exits_[Z_DEC] = attr;
+	}
+	else
+	{
+		return false;
+	}
+
+	return true;
+}
+
 bool octillion::Cube::addlink(Cube* dest)
 {
-    CubePosition to = dest->loc();
-    if (to.x() == loc_.x() + 1 && to.y() == loc_.y() && to.z() == loc_.z())
-    {
-        exits_[1] = 1;
-    }
-    else if (to.x() == loc_.x() - 1 && to.y() == loc_.y() && to.z() == loc_.z())
-    {
-        exits_[3] = 1;
-    }
-    else if (to.x() == loc_.x() && to.y() == loc_.y() + 1 && to.z() == loc_.z())
-    {
-        exits_[2] = 1;
-    }
-    else if (to.x() == loc_.x() && to.y() == loc_.y() - 1 && to.z() == loc_.z())
-    {
-        exits_[0] = 1;
-    }
-    else if (to.x() == loc_.x() && to.y() == loc_.y() && to.z() == loc_.z() + 1)
-    {
-        exits_[4] = 1;
-    }
-    else if (to.x() == loc_.x() && to.y() == loc_.y() && to.z() == loc_.z() - 1)
-    {
-        exits_[5] = 1;
-    }
-    else
-    {
-        return false;
-    }
-
-    return true;
+	return addlink(dest, dest->attr_);
 }
 
 // parameter type
@@ -264,7 +272,7 @@ octillion::Area::Area( JsonW* json )
 
         // get mark if exist (optional)        
         JsonW* jmark = jcube->get( u8"mark" );
-        if (jcube != NULL && jmark->type() == JsonW::STRING )
+        if (jmark != NULL && jmark->type() == JsonW::STRING )
         {
             std::string markstr = jmark->str();
 
@@ -284,9 +292,17 @@ octillion::Area::Area( JsonW* json )
                 markmap[markstr] = pos;
             }
         }
+
+		// get attr if exist (optional)
+		JsonW* jattrs = jcube->get(u8"attr");
+		uint_fast32_t attr;
+		if (Cube::json2attr(jattrs, attr) != OcError::E_SUCCESS)
+		{
+			attr = 0xFFFFFFFF;
+		}
                 
         // create cube and store in cubes_
-        Cube* cube = new Cube( pos, jtitle->str(), id_ );
+        Cube* cube = new Cube( pos, jtitle->str(), id_, attr);
         cubes_[pos] = cube;
     }
     
@@ -295,109 +311,154 @@ octillion::Area::Area( JsonW* json )
     if (jvalue != NULL && jvalue->type() == JsonW::ARRAY )
     {
         bool ret;
-        for ( size_t i = 0; i < jvalue->size(); i ++ )
-        {        
-            JsonW* jlink = jvalue->get(i);
-            JsonW* jlinkvalue;
+		for (size_t i = 0; i < jvalue->size(); i++)
+		{
+			JsonW* jlink = jvalue->get(i);
+			JsonW* jlinkvalue;
 
-            if (jlink == NULL || jlink->type() != JsonW::OBJECT )
-            {
-                return;
-            }
+			if (jlink == NULL || jlink->type() != JsonW::OBJECT)
+			{
+				return;
+			}
 
-            int type = (int)(jlink->get( u8"type" )->integer());
-            if ( type == 0 )
-            {
-                return;
-            }
-            
-            CubePosition from, to;
+			bool twoway = true;
+			JsonW* jtype = jlink->get(u8"type");
+			if (jtype != NULL && jtype->type() == JsonW::STRING)
+			{
+				if (jtype->str() == u8"1way")
+				{
+					twoway = false;
+				}
+			}
 
-            // get 'from'
-            jlinkvalue = jlink->get( u8"from" );
-            if (jlinkvalue == NULL )
-            {
-                return;
-            }
-            else if (jlinkvalue->type() == JsonW::STRING )
-            {
-                std::string str = jlinkvalue->str();
-                auto it = markmap.find( str );
-                if ( it == markmap.end() )
-                {
-                    return;
-                }
-                else
-                {
-                    from = it->second;
-                }
-            }
-            else if (jlinkvalue->type() == JsonW::ARRAY )
-            {
-                ret = readloc(jlinkvalue, from, offset_x_, offset_y_, offset_z_ );
-                if ( ret == false )
-                {
-                    return;
-                }
-            }
-            else
-            {
-                return;
-            }
-            
-            // get 'to'
-            jlinkvalue = jlink->get( u8"to" );            
-            if (jlinkvalue == NULL )
-            {
-                return;
-            }
-            else if (jlinkvalue->type() == JsonW::STRING )
-            {
-                std::string str = jlinkvalue->str();
-                auto it = markmap.find( str );
-                if ( it == markmap.end() )
-                {
-                    return;
-                }
-                else
-                {
-                    to = it->second;
-                }
-            }
-            else if ( jlinkvalue->type() == JsonW::ARRAY )
-            {
-                ret = readloc(jlinkvalue, to, offset_x_, offset_y_, offset_z_ );
-                if ( ret == false )
-                {
-                    return;
-                }
-            }
-            else
-            {
-                return;
-            }
-            
-            // check if from and to both exists
-            if ( cubes_.find( from ) == cubes_.end() )
-            {
-                return;
-            }
-            
-            if ( cubes_.find( to ) == cubes_.end() )
-            {
-                return;
-            }
-            
-            // add link for each cube
-            Cube* cubefrom = cubes_[from];
-            Cube* cubeto = cubes_[to];
-            
-            addlink(type, cubefrom, cubeto);
+			CubePosition from, to;
+
+			// get 'from'
+			jlinkvalue = jlink->get(u8"from");
+			if (jlinkvalue == NULL)
+			{
+				return;
+			}
+			else if (jlinkvalue->type() == JsonW::STRING)
+			{
+				std::string str = jlinkvalue->str();
+				auto it = markmap.find(str);
+				if (it == markmap.end())
+				{
+					return;
+				}
+				else
+				{
+					from = it->second;
+				}
+			}
+			else if (jlinkvalue->type() == JsonW::ARRAY)
+			{
+				ret = readloc(jlinkvalue, from, offset_x_, offset_y_, offset_z_);
+				if (ret == false)
+				{
+					return;
+				}
+			}
+			else
+			{
+				return;
+			}
+
+			// get 'to'
+			jlinkvalue = jlink->get(u8"to");
+			if (jlinkvalue == NULL)
+			{
+				return;
+			}
+			else if (jlinkvalue->type() == JsonW::STRING)
+			{
+				std::string str = jlinkvalue->str();
+				auto it = markmap.find(str);
+				if (it == markmap.end())
+				{
+					return;
+				}
+				else
+				{
+					to = it->second;
+				}
+			}
+			else if (jlinkvalue->type() == JsonW::ARRAY)
+			{
+				ret = readloc(jlinkvalue, to, offset_x_, offset_y_, offset_z_);
+				if (ret == false)
+				{
+					return;
+				}
+			}
+			else
+			{
+				return;
+			}
+
+			// check if from and to both exists
+			if (cubes_.find(from) == cubes_.end())
+			{
+				return;
+			}
+
+			if (cubes_.find(to) == cubes_.end())
+			{
+				return;
+			}
+
+			// get attr if exist (optional)
+			JsonW* jattrs = jlink->get(u8"attr");
+			bool hasattrs = false;
+			uint_fast32_t attr;
+			if (Cube::json2attr(jattrs, attr) == OcError::E_SUCCESS)
+			{
+				hasattrs = true;
+			}
+
+			// add link for each cube
+			Cube* cubefrom = cubes_[from];
+			Cube* cubeto = cubes_[to];
+
+			if (hasattrs)
+			{
+				addlink(twoway, cubefrom, cubeto, attr);
+			}
+			else
+			{
+				addlink(twoway, cubefrom, cubeto);	
+			}
         }
     }
     
     valid_ = true;
     return;
+}
+
+std::error_code octillion::Cube::json2attr(JsonW* jattrs, uint_fast32_t& attr)
+{
+	if (jattrs == NULL || jattrs->type() != JsonW::ARRAY )
+	{
+		return OcError::E_FATAL;
+	}
+
+	attr = 0xFFFFFFFF;
+	for (size_t idx = 0; idx < jattrs->size(); idx++)
+	{
+		JsonW* jattr = jattrs->get(idx);
+		std::string attrstr = jattr->str();
+
+		if (attrstr == "nomob")
+		{
+			attr = attr ^ Cube::MOB_CUBE;
+		}
+		else if (attrstr == "nonpc")
+		{
+			attr = attr ^ Cube::NPC_CUBE;
+		}
+	}
+	return OcError::E_SUCCESS;
 }
 
 octillion::Cube* octillion::Area::cube(CubePosition loc)
@@ -414,7 +475,7 @@ octillion::Cube* octillion::Area::cube(CubePosition loc)
     }
 }
 
-bool octillion::Area::readloc( JsonW* jvalue, CubePosition& pos, uint_fast32_t offset_x, uint_fast32_t offset_y, uint_fast32_t offset_z )
+bool octillion::Area::readloc( const JsonW* jvalue, CubePosition& pos, uint_fast32_t offset_x, uint_fast32_t offset_y, uint_fast32_t offset_z )
 {
     uint_fast32_t x, y, z;
     if ( jvalue == NULL || jvalue->valid() == false || jvalue->type() != JsonW::ARRAY )
@@ -442,10 +503,33 @@ bool octillion::Area::readloc( JsonW* jvalue, CubePosition& pos, uint_fast32_t o
     return true;
 }
 
-bool octillion::Area::addlink(int linktype, Cube* from, Cube* to)
+bool octillion::Area::addlink(bool is_2way, Cube* from, Cube* to, uint_fast32_t attr )
 {
-    // type-2 is two-way link
-    if (linktype == 2)
+	// 2-way link
+	if (is_2way)
+	{
+		if (from->addlink(to, attr) == false)
+		{
+			return false;
+		}
+
+		if (to->addlink(from, attr) == false)
+		{
+			return false;
+		}
+
+		return true;
+	}
+	else
+	{
+		return from->addlink(to, attr);
+	}
+}
+
+bool octillion::Area::addlink(bool is_2way, Cube* from, Cube* to)
+{
+    // 2-way link
+    if (is_2way)
     {
         if (from->addlink(to) == false)
         {
@@ -459,8 +543,10 @@ bool octillion::Area::addlink(int linktype, Cube* from, Cube* to)
 
         return true;
     }
-
-    return false;
+	else
+	{
+		return from->addlink(to);
+	}    
 }
 
 octillion::Area::~Area()

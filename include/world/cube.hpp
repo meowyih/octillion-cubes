@@ -115,20 +115,25 @@ private:
 public:
     const static int X_INC = 1;
     const static int Y_INC = 2;
-    const static int Z_INC = 3;
-    const static int X_DEC = 4;
-    const static int Y_DEC = 5;
-    const static int Z_DEC = 6;
+    const static int Z_INC = 4;
+    const static int X_DEC = 3;
+    const static int Y_DEC = 0;
+    const static int Z_DEC = 5;
+	
+	const static uint_fast32_t MOB_CUBE = 0x1;
+	const static uint_fast32_t NPC_CUBE = 0x2;
+	const static uint_fast32_t GOD_CUBE = 0x80000000;
 
 public:
     Cube(const CubePosition& loc);
-    Cube(const CubePosition& loc, const std::string& title, int areaid );
+    Cube(const CubePosition& loc, const std::string& title, int areaid, uint_fast32_t attr );
     Cube( const Cube& rhs );
     ~Cube();
 
 public:
     CubePosition loc() { return loc_; }
     uint_fast32_t area() { return areaid_; }
+	bool addlink(Cube* dest, uint_fast32_t attr);
     bool addlink(Cube* dest);
     std::string title() { return title_; }
 
@@ -137,7 +142,35 @@ public:
     // 2 - Event::TYPE_JSON_DETAIL, for detail event usage
     JsonW* json(int type);
 
+	// help function, randomly pick one exit | exit_mask > 0.
+	// and cube arribute | attr_mask > 0.
+	// return -1 if no allowed enter
+	int random_exit(uint8_t exit_mask)
+	{
+		bool has5 = false;
+		std::vector<int> candidate;
+		for (int idx = 0; idx < 6; idx++)
+		{
+			if ((exits_[idx] & exit_mask) > 0 )
+			{
+				candidate.push_back(idx);
+			}
+		}
+
+		if (candidate.size() == 0)
+		{
+			return -1;
+		}
+		else
+		{
+			int idx = rand() % candidate.size();
+			return candidate.at(idx);
+		}
+	}
+
 public:
+	static std::error_code json2attr(JsonW* jattr, uint_fast32_t& attr);
+
     inline static int opposite_dir(int dir)
     {
         switch (dir)
@@ -153,14 +186,64 @@ public:
         }
     }
 
-    // static bool link(int type, Cube* from, Cube* to);
+	inline static int dir(Cube* from, Cube* to)
+	{
+		if (from->loc_.x() == to->loc_.x() && from->loc_.y() == to->loc_.y())
+		{
+			if (from->loc_.z() == to->loc_.z() + 1)
+				return Z_INC;
+			else if (from->loc_.z() == to->loc_.z() - 1)
+				return Z_DEC;
+		}
+		else if (from->loc_.x() == to->loc_.x() && from->loc_.z() == to->loc_.z())
+		{
+			if (from->loc_.y() == to->loc_.y() + 1)
+				return Y_INC;
+			else if (from->loc_.y() == to->loc_.y() - 1)
+				return Y_DEC;
+		}
+		else if (from->loc_.y() == to->loc_.y() && from->loc_.z() == to->loc_.z())
+		{
+			if (from->loc_.x() == to->loc_.x() + 1)
+				return X_INC;
+			else if (from->loc_.x() == to->loc_.x() - 1)
+				return X_DEC;
+		}
+
+		return -1;
+	}
+
+	inline Cube* find(std::map<CubePosition, Cube*>& cubes_, int dir) 
+	{
+		CubePosition cbloc;
+		switch (dir)
+		{
+		case X_INC: cbloc.set(loc_.x() + 1, loc_.y(), loc_.z()); break;
+		case Y_INC: cbloc.set(loc_.x(), loc_.y() + 1, loc_.z()); break;
+		case Z_INC: cbloc.set(loc_.x(), loc_.y(), loc_.z() + 1); break;
+		case X_DEC: cbloc.set(loc_.x() - 1, loc_.y(), loc_.z()); break;
+		case Y_DEC: cbloc.set(loc_.x(), loc_.y() - 1, loc_.z()); break;
+		case Z_DEC: cbloc.set(loc_.x(), loc_.y(), loc_.z() - 1); break;
+		default:
+			return NULL;
+		}
+
+		auto it = cubes_.find(cbloc);
+		if (it == cubes_.end())
+		{
+			return NULL;
+		}
+		return it->second;
+	}
+
 private:
     int areaid_ = 0;
+	uint_fast32_t attr_ = 0xFFFFFFFF;
     CubePosition loc_;
     std::string title_;
 
 public:
-    uint8_t exits_[6];
+	uint_fast32_t exits_[6];
 
 #ifdef MEMORY_DEBUG
 public:
@@ -225,8 +308,9 @@ public:
     std::map<CubePosition, Cube*> cubes_;
 
 public:
-    static bool readloc( JsonW* jvalue, CubePosition& pos, uint_fast32_t offset_x, uint_fast32_t offset_y, uint_fast32_t offset_z );
-    static bool addlink( int linktype, Cube* from, Cube* to);
+    static bool readloc( const JsonW* jvalue, CubePosition& pos, uint_fast32_t offset_x, uint_fast32_t offset_y, uint_fast32_t offset_z );
+	static bool addlink(bool is_2way, Cube* from, Cube* to, uint_fast32_t attr );
+    static bool addlink( bool is_2way, Cube* from, Cube* to);
 private:
     bool valid_ = false;
     int id_;

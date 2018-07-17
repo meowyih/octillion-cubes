@@ -11,6 +11,7 @@
 
 #include "world/cube.hpp"
 #include "world/player.hpp"
+#include "world/mob.hpp"
 #include "world/command.hpp"
 #include "world/event.hpp"
 
@@ -54,6 +55,7 @@ public:
 
 public:
     std::error_code tick();
+	std::error_code tick(Mob* mob, std::list<Event*>& events);
 
 private:
     std::error_code cmdUnknown(int fd, Command *cmd, JsonW* jsonobject);
@@ -84,14 +86,27 @@ private:
 
     // help function, create/add json object based on event
     inline void addjsons(Event* event, std::set<Player*>* players, std::map<int, JsonW*>& jsons);
+	inline void addjsons(Event* event, Player* players, std::map<int, JsonW*>& jsons);
 
     // help function, move player location and change cube_players_, and area_players_
     // function WILL NOT check the newloc's existence
     inline void move(Player* player, Cube* cube_to);
 
+	// help function, reborn the player
+	inline void reborn(Player* player, std::list<Event*>& events);
+
+    // read a Cube pointer from global json
+    static Cube* readloc(
+        JsonW* json,
+        const std::map<int, std::map<std::string, Cube*>*>& area_marks,
+        const std::map<CubePosition, Cube*>& cubes
+    );
+
 private:
+    bool initialized_ = false;
     std::mutex cmds_lock_;
-    std::list<Command*> cmds_; // fd and Command*
+    std::map<int, Command*> cmds_; // fd and Command*
+	std::list<Command*> cmds_inout_; // fd and login/logout cmd
 
 private:
     std::set<Area*> areas_;
@@ -101,6 +116,11 @@ private:
     std::set<Player*> world_players_; // shortcut to the players in the world, DO NOT release the player.
     std::map<Cube*, std::set<Player*>*> cube_players_; // shortcut to the players in specific cube, DO NOT release the player.
     std::map<int, std::set<Player*>*> area_players_; // shortcut to the players in specific area, DO NOT release the player.
+
+	std::map<uint_fast32_t, Mob*> world_mobs_;
+
+	std::set<Player*> combat_players_;
+	std::set<Mob*> combat_mobs_;
 
 private:
     FileDatabase database_;

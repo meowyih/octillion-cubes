@@ -2,9 +2,20 @@
     "links":
     [
         { 
-            "type":2, 
+            "type": "2way", 
             "from": { "area": 1, "cube":"central" },
-            "to": { "area": 2, "cube":"under00"}
+            "to": { "area": 2, "cube":"under00"},			
         }
-    ]
+    ],
+	
+	"mobs":
+	[
+		{
+			"race": 1,
+			"subrace": 0,
+			"level": 1,
+			"short": "test mob",
+			"long": "a floating test mob"
+		}
+	]
 }

@@ -40,8 +40,8 @@ public:
     virtual uint_fast32_t login(std::string name, std::string password) override;
     virtual std::string hashpassword(std::string password) override;
     virtual std::error_code reserve(int fd, std::string name) override;
-    virtual std::error_code create( int fd, Player* player, CubePosition& loc) override;
-    virtual std::error_code load( uint_fast32_t pcid, Player* player, CubePosition& loc) override;
+    virtual std::error_code create( int fd, Player* player, CubePosition& loc, CubePosition& loc_reborn) override;
+    virtual std::error_code load( uint_fast32_t pcid, Player* player, CubePosition& loc, CubePosition& loc_reborn) override;
     virtual std::error_code save( Player* player ) override;
     
 private:

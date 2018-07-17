@@ -210,7 +210,11 @@ std::error_code octillion::FileDatabase::reserve(int fd, std::string name)
     return OcError::E_SUCCESS;
 }
 
-std::error_code octillion::FileDatabase::create( int fd, Player* player, CubePosition& loc)
+std::error_code octillion::FileDatabase::create( 
+	int fd, 
+	Player* player, 
+	CubePosition& loc,
+	CubePosition& loc_reborn )
 {
     FileDatabaseListItem item;
     std::string username = player->username();
@@ -247,6 +251,11 @@ std::error_code octillion::FileDatabase::create( int fd, Player* player, CubePos
         (uint_fast32_t)100000,
         (uint_fast32_t)100000);
 
+	loc_reborn.set(
+		(uint_fast32_t)100000,
+		(uint_fast32_t)100000,
+		(uint_fast32_t)100000);
+
     item.pcid = player->id();
     item.password = player->password();
     userlist_[player->username()] = item;
@@ -256,7 +265,11 @@ std::error_code octillion::FileDatabase::create( int fd, Player* player, CubePos
     return save(player);
 }
       
-std::error_code octillion::FileDatabase::load( uint_fast32_t pcid, Player* player, CubePosition& loc)
+std::error_code octillion::FileDatabase::load( 
+	uint_fast32_t pcid, 
+	Player* player,
+	CubePosition& loc,
+	CubePosition& loc_reborn)
 {    
     if ( player == NULL )
     {
@@ -305,7 +318,6 @@ std::error_code octillion::FileDatabase::load( uint_fast32_t pcid, Player* playe
         player->cha((uint_fast32_t)json.get(u8"cha")->integer());
 
         JsonW* jloc = json.get(u8"loc");
-
         if (jloc->size() != 3 ||
             jloc->get(0)->type() != JsonW::INTEGER ||
             jloc->get(1)->type() != JsonW::INTEGER ||
@@ -319,6 +331,21 @@ std::error_code octillion::FileDatabase::load( uint_fast32_t pcid, Player* playe
             (uint_fast32_t) jloc->get(0)->integer(),
             (uint_fast32_t) jloc->get(1)->integer(),
             (uint_fast32_t) jloc->get(2)->integer());
+
+		JsonW* jloc_reborn = json.get(u8"reborn");
+		if (jloc_reborn->size() != 3 ||
+			jloc_reborn->get(0)->type() != JsonW::INTEGER ||
+			jloc_reborn->get(1)->type() != JsonW::INTEGER ||
+			jloc_reborn->get(2)->type() != JsonW::INTEGER)
+		{
+			LOG_E(tag_) << "fatal error, player file:" << filename << " json has bad reborn field";
+			return OcError::E_DB_BAD_RECORD;
+		}
+
+		loc_reborn.set(
+			(uint_fast32_t)jloc_reborn->get(0)->integer(),
+			(uint_fast32_t)jloc_reborn->get(1)->integer(),
+			(uint_fast32_t)jloc_reborn->get(2)->integer());
 
         return OcError::E_SUCCESS;
     }
@@ -354,6 +381,12 @@ std::error_code octillion::FileDatabase::save( Player* player )
     jloc->add((long long)(player->cube()->loc().y()));
     jloc->add((long long)(player->cube()->loc().z()));
     jobject->add(u8"loc", jloc);
+
+	JsonW* jloc_reborn = new JsonW();
+	jloc_reborn->add((long long)(player->cube_reborn()->loc().x()));
+	jloc_reborn->add((long long)(player->cube_reborn()->loc().y()));
+	jloc_reborn->add((long long)(player->cube_reborn()->loc().z()));
+	jobject->add(u8"reborn", jloc_reborn);
 
     std::ofstream pcfile(filename, std::ofstream::out | std::ofstream::trunc);
     pcfile << (jobject->text(false));

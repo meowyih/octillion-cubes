@@ -4,6 +4,8 @@
 #include <set>
 #include <vector>
 #include <map>
+#include <cstdlib>
+#include <ctime>
 
 #include "error/ocerror.hpp"
 #include "error/macrolog.hpp"
@@ -12,6 +14,7 @@
 #include "world/cube.hpp"
 #include "world/command.hpp"
 #include "world/event.hpp"
+#include "world/mob.hpp"
 
 #include "server/rawprocessor.hpp"
 
@@ -23,10 +26,18 @@ const std::string octillion::World::tag_ = "World";
 
 octillion::World::World()
 {
+	bool init_succeed = true;
+
+	// init random seed for World() rand() usage
+	srand((unsigned int) time(NULL));
+
     LOG_D(tag_) << "World() start";
 
     // mark vector
     std::map<int, std::map<std::string, Cube*>*> area_marks;
+
+	// default monster configuration
+	std::map<uint_fast32_t, Mob*> mob_wiki;
 
     // init database
     database_.init(std::string("save"));
@@ -46,6 +57,7 @@ octillion::World::World()
         if (!fin.good())
         {
             LOG_E(tag_) << "Failed to init area file:" << fname << std::endl;
+			init_succeed = false;
             return;
         }
 
@@ -54,6 +66,7 @@ octillion::World::World()
         {
             LOG_E(tag_) << "Failed to init area file:" << fname << std::endl;
             delete json;
+			init_succeed = false;
             return;
         }
         else
@@ -101,6 +114,7 @@ octillion::World::World()
     if (!fin.good())
     {
         LOG_E(tag_) << "Failed to init area file:" << "data/_global.json" << std::endl;
+		init_succeed = false;
         return;
     }
 
@@ -115,108 +129,52 @@ octillion::World::World()
         JsonW* jfromcube = jfrom->get("cube");
         JsonW* jtocube = jto->get("cube");
 
+        Cube *from, *to;
+
         // get link type, area 'from' id, area 'to' id
-        int linktype = (int) jglink->get(u8"type")->integer();
+        std::string linktype = jglink->get(u8"type")->str();
+		bool is_twoway = true;
         int area_from = (int)jfrom->get(u8"area")->integer();
         int area_to = (int)jto->get(u8"area")->integer();
+		if (linktype == "1way")
+		{
+			is_twoway = false;
+		}
 
-        // get marks map for area from and area to
-        auto itmark = area_marks.find(area_from);
-        if (itmark == area_marks.end())
+		
+
+        // read 'from'
+        // sample: "from": { "area": 1, "cube":"central" },
+        // sample: "from": { "cube":[10001,10001,10001] },
+        // sample: "from": { "cube":[1,1,1], "offset": [100000, 100000, 100000],: },
+        from = readloc( jfrom, area_marks, cubes_);
+        to = readloc( jto, area_marks, cubes_);
+
+        if (from == NULL || to == NULL)
         {
-            LOG_E(tag_) << "no mark for area id " << area_from;
+            LOG_E(tag_) << "World() bad json " << jglink->text();
+			init_succeed = false;
             continue;
         }
-        std::map<std::string, Cube*>* marks_from = itmark->second;
-
-        itmark = area_marks.find(area_to);
-        if (itmark == area_marks.end())
-        {
-            LOG_E(tag_) << "no mark for area id " << area_to;
-            continue;
-        }
-        std::map<std::string, Cube*>* marks_to = itmark->second;
-
-        // get Cube* from and Cube* to
-        Cube* from;
-        Cube* to;
-
-        if (jfromcube->type() == JsonW::STRING)
-        {
-            auto itcube = marks_from->find(jfromcube->str());
-            if (itcube == marks_from->end())
-            {
-                LOG_E(tag_) << "World(), no mark " << jfromcube->str() << " in area " << area_from;
-                continue;
-            }
-            from = itcube->second;            
-        }
-        else if (jfromcube->type() == JsonW::ARRAY)
-        {
-            bool ret;
-            CubePosition pos;
-            ret = Area::readloc(jfromcube, pos, 0, 0, 0);
-
-            if (ret == false)
-            {
-                LOG_E(tag_) << "World(), bad from loc: " << jfromcube->text();
-                continue;
-            }
-
-            auto itcube = cubes_.find(pos);
-            if (itcube == cubes_.end())
-            {
-                LOG_E(tag_) << "World(), no cube for pos " << pos.str();
-                continue;
-            }
-            from = itcube->second;
-        }
-        else
-        {
-            LOG_E(tag_) << "World(), bad from loc: " << jfromcube->text();
-            continue;
-        }
-
-        if (jtocube->type() == JsonW::STRING)
-        {
-            auto itcube = marks_to->find(jtocube->str());
-            if (itcube == marks_to->end())
-            {
-                LOG_E(tag_) << "World(), no mark " << jtocube->str() << " in area " << area_from;
-                continue;
-            }
-            to = itcube->second;
-        }
-        else if (jtocube->type() == JsonW::ARRAY)
-        {
-            bool ret;
-            CubePosition pos;
-            ret = Area::readloc(jtocube, pos, 0, 0, 0);
-            if (ret == false)
-            {
-                LOG_E(tag_) << "World(), bad to loc: " << jtocube->text();
-                continue;
-            }
-
-            auto itcube = cubes_.find(pos);
-            if (itcube == cubes_.end())
-            {
-                LOG_E(tag_) << "World(), no cube for pos " << pos.str();
-                continue;
-            }
-            to = itcube->second;
-        }
-        else
-        {
-            LOG_E(tag_) << "World(), bad to loc: " << jtocube->text();
-            continue;
-        }
+		
+		JsonW* jattrs = jglink->get("attr");
+		uint_fast32_t attr;
+		bool ret;
+		if (Cube::json2attr(jattrs, attr) != OcError::E_SUCCESS)
+		{
+			ret = Area::addlink(is_twoway, from, to);
+		}
+		else
+		{
+			ret = Area::addlink(is_twoway, from, to, attr);
+		}
 
         // create link
-        if (Area::addlink(linktype, from, to) == false)
+        if (ret == false)
         {
             LOG_E(tag_) << "World(), failed to add link between " 
                 << from->loc().str() << " " << to->loc().str();
+			init_succeed = false;
         }
         else
         {
@@ -224,7 +182,125 @@ octillion::World::World()
         }
     }
 
-    LOG_E(tag_) << "World() add global link " << global_link_count;
+	// read global mob's wiki
+	JsonW* jgmobs = jglobal->get(u8"mobs");
+	for (size_t idx = 0; idx < jgmobs->size(); idx++)
+	{
+		JsonW* jmob = jgmobs->get(idx);
+		Mob* mob = new Mob(jmob);
+
+		if (mob == NULL || mob->valid() == false)
+		{			
+			LOG_E(tag_) << "World() failed to read mob wiki " << jmob->text();
+			init_succeed = false;
+			delete mob;
+			continue;
+		}
+		else
+		{
+			auto itmobwiki = mob_wiki.find(mob->type());
+			if (itmobwiki != mob_wiki.end())
+			{
+				LOG_E(tag_) << "World() duplicate mobwiki " << jmob->text();
+				init_succeed = false;
+				delete mob;
+				continue;
+			}
+			mob_wiki[ mob->type() ] = mob;
+		}
+	}
+
+	// read area mob
+	for (size_t i = 0; i < areafnames.size(); i++)
+	{
+		// read area data
+		std::string fname = areafnames[i];
+		std::ifstream fin(fname);
+
+		if (!fin.good())
+		{
+			LOG_E(tag_) << "Failed to init area file:" << fname << std::endl;
+			init_succeed = false;
+			return;
+		}
+
+		JsonW* json = new JsonW(fin);
+		fin.close();
+		if (json->valid() == false)
+		{
+			// bad file content, go next
+			LOG_E(tag_) << "Failed to init area file:" << fname << std::endl;
+			delete json;
+			json = NULL;
+			init_succeed = false;
+			break;
+		}
+		else
+		{
+			// read all mobs
+			JsonW* jmobs = json->get(u8"mobs");
+			if (jmobs == NULL || jmobs->type() != JsonW::ARRAY )
+			{
+				// no mobs in this area
+				delete json;
+				json = NULL;
+				continue;
+			}
+
+			CubePosition goffset;
+			JsonW* joffset = json->get(u8"offset");
+			if (joffset != NULL && joffset->type() == JsonW::ARRAY &&
+				joffset->size() == 3)
+			{
+				goffset.set(
+					(uint_fast32_t) joffset->get(0)->integer(),
+					(uint_fast32_t) joffset->get(1)->integer(),
+					(uint_fast32_t) joffset->get(2)->integer()
+				);
+			}
+
+			for (size_t idx = 0; idx < jmobs->size(); idx++)
+			{
+				// read each mob
+				JsonW* jmob = jmobs->get(idx);
+				Mob* mob = new Mob( 
+					(int) json->get(u8"id")->integer(),
+					(int) idx + 1,
+					jmob,
+					mob_wiki,
+					area_marks,
+					cubes_,
+					goffset);
+
+				if (mob->valid() == false)
+				{
+					LOG_E(tag_) << "bad mob in area:" << json->get(u8"id")->integer() << " " << jmob->text();
+					delete mob;
+					continue;
+				}
+
+				auto itmob = world_mobs_.find(mob->id());
+				if (itmob != world_mobs_.end())
+				{
+					LOG_E(tag_) << "duplicate mob in area:" << json->get(u8"id")->integer() << " " << jmob->text();
+					delete mob;
+					continue;
+				}
+				world_mobs_[mob->id()] = mob;
+			}
+		}
+		delete json;
+	}
+
+	LOG_D(tag_) << "total mob: " << world_mobs_.size();
+
+	// remove mob wiki
+	for (auto itmob : mob_wiki)
+	{
+		delete itmob.second;
+	}
+
+    LOG_D(tag_) << "World() add global link " << global_link_count;
     delete jglobal;
 
     // release marks
@@ -239,6 +315,11 @@ octillion::World::World()
 
     LOG_I(tag_) << "World() creates cube links:" << cubes_.size();
     LOG_D(tag_) << "World() done";
+
+	if (init_succeed)
+	{
+		initialized_ = true;
+	}
 }
 
 octillion::World::~World()
@@ -268,10 +349,17 @@ octillion::World::~World()
         delete it.second;
     }
 
+	for (auto& it : cmds_inout_)
+	{
+		LOG_D(tag_) << "~World() delete cmd inout fd:" << it->fd();
+		delete it;
+	}
+
     for (auto& it : cmds_)
     {
-        LOG_D(tag_) << "~World() delete cmd fd:" << it->fd();
-        delete it;
+		Command* cmd = it.second;
+        LOG_D(tag_) << "~World() delete cmd fd:" << cmd->fd();
+        delete cmd;
     }
 
     for (auto it : cube_players_)
@@ -315,6 +403,11 @@ octillion::World::~World()
         LOG_D(tag_) << "~World() delete area:" << it->id();
         delete it;
     }
+
+	for (auto it : world_mobs_)
+	{
+		delete it.second;
+	}
 
     LOG_D(tag_) << "~World() done";
 }
@@ -392,13 +485,43 @@ std::error_code octillion::World::tick()
     
     // LOG_D(tag_) << "tick start, cmds_.size:" << cmds_.size();
 
-    // handle commands in cmds_
-    cmds_lock_.lock();
+    if (!initialized_)
+    {
+        LOG_E(tag_) << "cannot run tick() since World init failed";
+        return OcError::E_FATAL;
+    }
 
+	// handle login/logout commands in cmds_inout_
+	cmds_lock_.lock();
+	for (auto& it : cmds_inout_ )
+	{
+		int fd = it->fd();
+		Command* cmd = it;
+
+		if (cmd->cmd() == Command::CONNECT)
+		{
+			connect(fd);
+		}
+		else if (cmd->cmd() == Command::DISCONNECT)
+		{
+			disconnect(fd, events);
+		}
+		else
+		{
+			// impossible
+		}
+
+		delete cmd;
+	}
+	cmds_inout_.clear();
+	cmds_lock_.unlock();
+
+    // handle normal commands in cmds_
+    cmds_lock_.lock();
     for (auto& it : cmds_)
     {
-        int fd = it->fd();
-        Command* cmd = it;
+		Command* cmd = it.second;
+        int fd = cmd->fd();
         std::error_code err = OcError::E_SUCCESS;
         JsonW* cmdback = new JsonW();
         
@@ -410,16 +533,6 @@ std::error_code octillion::World::tick()
         {
             switch (cmd->cmd())
             {
-            case Command::CONNECT:
-                connect(fd);
-                delete cmdback;
-                // CONNECT is special command that created by rawprocessor, no need to send feedback to user
-                continue;
-            case Command::DISCONNECT:
-                disconnect(fd, events);
-                delete cmdback;
-                // DISCONNECT is special command that created by rawprocessor, no need to send feedback to user
-                continue;
             case Command::VALIDATE_USERNAME:
                 err = cmdValidateUsername(fd, cmd, cmdback);
                 break;
@@ -472,11 +585,25 @@ std::error_code octillion::World::tick()
     // all cmd were transfer to cmdbacks, clear cmds_
     for (auto& it : cmds_)
     {
-        delete it;
+        delete it.second;
     }
-
     cmds_.clear();
     cmds_lock_.unlock();
+
+	// handle player's tick
+	for (auto itplayer : world_players_)
+	{
+		Player* player = itplayer;
+		// TODO: player tick
+		// tick(player, events);
+	}
+
+	// handle monster moving, attacking, dead and reborn
+	for (auto itmob : world_mobs_)
+	{
+		Mob* mob = itmob.second;
+		tick(mob, events);
+	}
 
     // encapsulate cmdbacks (JsonObjectW) into jsons (JsonTextW)
     for ( const auto& itcmdbacks : cmdbacks)
@@ -518,9 +645,18 @@ std::error_code octillion::World::tick()
             // add event to all the players in the same cube
             addjsons(event, it->second, jsons);
         }
+		else if (event->range_ == Event::RANGE_PRIVATE)
+		{
+			int fd = event->player_.fd();
+			auto itplayer = players_.find(fd);
+			if (itplayer != players_.end())
+			{
+				addjsons(event, itplayer->second, jsons);
+			}
+		}
         else // TODO: handle other range events
         {
-            LOG_E(tag_) << "tick(), expected event range:" << event->range_;
+            LOG_E(tag_) << "tick(), unexpected event range:" << event->range_;
         } // end of if (event->range_ == Event::RANGE_WORLD) 
     }
 
@@ -539,7 +675,7 @@ std::error_code octillion::World::tick()
         std::string utf8 = jtext->text();
         RawProcessor::senddata(fd, (uint8_t*)utf8.data(), utf8.size() );
 
-        LOG_D(tag_) << "write fd:" << fd << " json:" << utf8 << std::endl;
+        LOG_I(tag_) << "write fd:" << fd << " json:" << utf8 << std::endl;
 
         delete jtext;
     }
@@ -674,8 +810,8 @@ std::error_code octillion::World::cmdConfirmUser(int fd, Command *cmd, JsonW* js
     player->gender(gender);
     player->cls(cls);
 
-    CubePosition loc;
-    err = database_.create(fd, player, loc);
+    CubePosition loc, loc_reborn;
+    err = database_.create(fd, player, loc, loc_reborn);
 
     if (err != OcError::E_SUCCESS)
     {
@@ -693,6 +829,15 @@ std::error_code octillion::World::cmdConfirmUser(int fd, Command *cmd, JsonW* js
         return OcError::E_WORLD_BAD_CUBE_POSITION;
     }
     player->cube(cit->second);
+
+	auto citreborn = cubes_.find(loc_reborn);
+	if (citreborn == cubes_.end())
+	{
+		LOG_E(tag_) << "cmdConfirmUser, reborn pos " << loc_reborn.str() << " does not exist";
+		delete player;
+		return OcError::E_WORLD_BAD_CUBE_POSITION;
+	}
+	player->cube_reborn(citreborn->second);
 
     // set feedback
     jsonobject->add(u8"cmd", Command::CONFIRM_USER);
@@ -715,6 +860,17 @@ std::error_code octillion::World::cmdLogin(int fd, Command* cmd, JsonW* jsonobje
     std::string password = cmd->strparms_[1];
     
     LOG_D(tag_) << "cmdLogin start, fd:" << fd << " user:" << username;
+
+	// check if username is still in the world
+	for (auto itplayer : world_players_)
+	{
+		Player* player = itplayer;
+		if (player->username() == username)
+		{
+			LOG_W(tag_) << "cmdLogin, failed, " << username << " has not logout yet";
+			return OcError::E_PROTOCOL_FD_DUPLICATE_LOGIN;
+		}
+	}
     
     // fd should exists in players_
     auto it = players_.find( fd );
@@ -742,8 +898,8 @@ std::error_code octillion::World::cmdLogin(int fd, Command* cmd, JsonW* jsonobje
     }
     
     Player* player = new Player();
-    CubePosition loc;
-    err = database_.load( pcid, player, loc );
+    CubePosition loc, loc_reborn;
+    err = database_.load( pcid, player, loc, loc_reborn);
     if (err != OcError::E_SUCCESS)
     {
         LOG_E(tag_) << "cmdLogin, database_.load pcid:" << pcid << " return err:" << err;
@@ -759,6 +915,15 @@ std::error_code octillion::World::cmdLogin(int fd, Command* cmd, JsonW* jsonobje
         return OcError::E_WORLD_BAD_CUBE_POSITION;
     }
     player->cube(cit->second);
+
+	auto citreborn = cubes_.find(loc_reborn);
+	if (citreborn == cubes_.end())
+	{
+		LOG_E(tag_) << "cmdLogin, reborn pos " << loc_reborn.str() << " does not exist";
+		delete player;
+		return OcError::E_WORLD_BAD_CUBE_POSITION;
+	}
+	player->cube_reborn(citreborn->second);
     
     // mapping player with fd
     player->fd(fd);
@@ -821,6 +986,11 @@ std::error_code octillion::World::cmdMove(int fd, Command* cmd, JsonW* jsonobjec
         LOG_E(tag_) << "cmdMove, failed since fd:" << fd << " does not exist in players_";
         return OcError::E_PROTOCOL_FD_NO_CONNECT;
     }
+    else if (pit->second == NULL)
+    {
+        LOG_E(tag_) << "cmdMove, failed since fd:" << fd << " not login yet";
+        return OcError::E_PROTOCOL_FD_LOGOUT;
+    }
 
     // check player's location and the target location
     Player* player = pit->second;
@@ -880,9 +1050,34 @@ std::error_code octillion::World::cmdFreezeWorld(int fd, Command* cmd, JsonW* js
 
 void octillion::World::addcmd(Command * cmd)
 {
-    cmds_lock_.lock();
-    cmds_.push_back(cmd);
-    cmds_lock_.unlock();
+	if (cmd == NULL)
+	{
+		LOG_W(tag_) << "addcmd() cmd is NULL";
+		return;
+	}
+
+	if (cmd->cmd() == Command::CONNECT || cmd->cmd() == Command::DISCONNECT)
+	{
+		cmds_lock_.lock();
+		cmds_inout_.push_back(cmd);
+		cmds_lock_.unlock();
+	}
+	else
+	{
+		cmds_lock_.lock();
+		// cmds_.push_back(cmd);
+		auto it = cmds_.find(cmd->fd());
+		if (it == cmds_.end())
+		{
+			cmds_[cmd->fd()] = cmd;
+		}
+		else
+		{
+			LOG_W(tag_) << "addcmd() multiple cmds for same fd: " << cmd->fd() << " drop it";
+			delete cmd;
+		}
+		cmds_lock_.unlock();
+	}
 }
 
 std::error_code octillion::World::enter(Player* player, std::list<Event*>& events)
@@ -1043,36 +1238,41 @@ void octillion::World::addjsons(Event* event, std::set<Player*>* players, std::m
 {
     for (auto& player : *players)
     {
-        JsonW* jarray; // events array
-        int fd = player->fd();
-
-        // get "events" array in jsons for the player
-        // case 1: fd does not exist in jsons
-        // case 2: fd exist in jsons, but there is no "events" name-pair in main object
-        // case 3: fd exist and there is "events" name-pair in main object
-        auto fdjson = jsons.find(fd);
-        if (fdjson == jsons.end())
-        {
-            // case 1: fd does not exist in jsons
-            JsonW* jobject = new JsonW();
-            jarray = new JsonW();
-            jobject->add("events", jarray);
-            jsons[fd] = jobject;
-        }
-        else
-        {
-            JsonW* jobject = fdjson->second;
-            jarray = jobject->get("events");
-
-            if (jarray == NULL)
-            {
-                jarray = new JsonW();
-                jobject->add("events", jarray);
-            }
-        } // end of get jarray
-
-        jarray->add(event->json());
+		addjsons(event, player, jsons);
     } // for (auto& player : *players)
+} // void octillion::World::addjsons
+
+void octillion::World::addjsons(Event* event, Player* player, std::map<int, JsonW*>& jsons)
+{
+	JsonW* jarray; // events array
+	int fd = player->fd();
+
+	// get "events" array in jsons for the player
+	// case 1: fd does not exist in jsons
+	// case 2: fd exist in jsons, but there is no "events" name-pair in main object
+	// case 3: fd exist and there is "events" name-pair in main object
+	auto fdjson = jsons.find(fd);
+	if (fdjson == jsons.end())
+	{
+		// case 1: fd does not exist in jsons
+		JsonW* jobject = new JsonW();
+		jarray = new JsonW();
+		jobject->add("events", jarray);
+		jsons[fd] = jobject;
+	}
+	else
+	{
+		JsonW* jobject = fdjson->second;
+		jarray = jobject->get("events");
+
+		if (jarray == NULL)
+		{
+			jarray = new JsonW();
+			jobject->add("events", jarray);
+		}
+	} // end of get jarray
+
+	jarray->add(event->json());
 } // void octillion::World::addjsons
 
 // help function, move player location and change cube_players_, and area_players_
@@ -1187,4 +1387,313 @@ void octillion::World::move(Player* player, Cube* cube_to)
     }
 
     player->cube(cube_to);
+}
+
+octillion::Cube* octillion::World::readloc(
+    JsonW* json,
+    const std::map<int, std::map<std::string, Cube*>*>& area_marks,
+    const std::map<CubePosition, Cube*>& cubes
+)
+{
+    int areaid;
+    JsonW* jarea = json->get(u8"area");
+    JsonW* jloc = json->get(u8"cube");    
+    if (jarea == NULL || jarea->valid() == false || jarea->type() != JsonW::INTEGER )
+    {
+        areaid = 0;
+    }
+    else
+    {
+        areaid = (int)jarea->integer();
+    }
+
+    if (jloc->type() == JsonW::STRING && areaid > 0 )
+    {
+        std::map<std::string, Cube*>* markmap;
+        auto itmark = area_marks.find(areaid);
+        if (itmark == area_marks.end())
+        {
+            LOG_E(tag_) << "readloc() areaid:" << areaid << " is not in area_marks";
+            return NULL;
+        }
+        markmap = itmark->second;
+
+        auto it = markmap->find(jloc->str());
+        if (it == markmap->end())
+        {
+            LOG_E(tag_) << "readloc() mark:" << jloc->str() << " is not in markmap";
+            return NULL;
+        }
+
+        return it->second;
+    }
+    else if (jloc->type() == JsonW::ARRAY)
+    {
+        JsonW* joffset = jloc->get(u8"offset");
+        bool ret;
+        CubePosition offset;
+        CubePosition cubepos;
+
+        if (joffset != NULL && joffset->type() == JsonW::ARRAY &&
+            joffset->size() == 3)
+        {
+            offset.set(
+                (uint_fast32_t) joffset->get(0)->integer(),
+                (uint_fast32_t) joffset->get(1)->integer(),
+                (uint_fast32_t) joffset->get(2)->integer());
+        }
+
+        ret = Area::readloc(jloc, cubepos, offset.x(), offset.y(), offset.z());
+        if (ret == false)
+        {
+            LOG_E(tag_) << "readloc(), Area::readloc() failed";
+            return NULL;
+        }
+
+        auto itcube = cubes.find(cubepos);
+        if (itcube == cubes.end())
+        {
+            LOG_E(tag_) << "cubepos " << cubepos.str() << " not in cubes";
+            return NULL;
+        }
+        return itcube->second;
+    }
+    else
+    {
+        LOG_E(tag_) << "readloc() bad json type";
+        return NULL;
+    }
+}
+
+void octillion::World::reborn(Player* player, std::list<Event*>& events)
+{
+	Event* event = new Event();
+	event->range_ = Event::RANGE_CUBE;
+	event->type_ = Event::TYPE_PLAYER_DEAD;
+	event->player(*player);
+	event->eventcube_ = player->cube();
+	events.push_back(event);
+
+	// move player to reborn cube
+	move(player, player->cube_reborn());
+
+	// reborn player
+	player->status(Player::STATUS_IDLE);
+	player->hp(100);
+
+	event = new Event();
+	event->range_ = Event::RANGE_CUBE;
+	event->type_ = Event::TYPE_PLAYER_REBORN;
+	event->player(*player);
+	event->eventcube_ = player->cube();
+	events.push_back(event);
+}
+
+std::error_code octillion::World::tick(Mob* mob, std::list<Event*>& events)
+{
+	// get the player list in the same cube
+	std::set<Player*>* players = NULL;
+	auto itplayers = cube_players_.find(mob->loc());
+	if (itplayers != cube_players_.end())
+	{
+		players = itplayers->second;
+	}
+
+	// get the highest lv and lowerest lv in the same cube
+	if (mob->status() == Mob::STATUS_IDLE && players != NULL && players->size() > 0)
+	{
+		Player *plstrong = NULL, *plweak = NULL;
+		for (auto it : *players)
+		{
+			if (plstrong == NULL)
+			{
+				plstrong = it;
+				plweak = it;
+			}
+			else
+			{
+				Player* pl = it;
+				if (plstrong->lvl() < pl->lvl())
+				{
+					plstrong = pl;
+				}
+				if (plweak->lvl() > pl->lvl())
+				{
+					plweak = pl;
+				}
+			}
+		}
+
+		switch (mob->combat())
+		{
+		case Mob::COMBAT_DUMMY: // never attack player
+		case Mob::COMBAT_PEACE: // never automatically attack player 
+			break;
+		case Mob::COMBAT_COWARD: // run away if player is stronger than mob
+			if (mob->lvl() <= plstrong->lvl())
+			{
+				// run aways!
+				mob->next_move_count(0);
+			}
+			break;
+		case Mob::COMBAT_AGGRESSIVE: // fight if player is weaker or equally level
+			if (mob->lvl() >= plweak->lvl())
+			{
+				// attack the plweak!
+				mob->target(static_cast<void*>(plweak));
+				mob->status( Mob::STATUS_COMBAT );
+				plweak->target(static_cast<void*>(mob));
+				plweak->status(Player::STATUS_COMBAT);
+				combat_mobs_.insert(mob);
+				combat_players_.insert(plweak);
+			}
+			break;
+		case Mob::COMBAT_CRAZY: // fight when player appears
+						   // attack the plweak!
+			mob->target(static_cast<void*>(plweak));
+			mob->status(Mob::STATUS_COMBAT);
+			plweak->target(static_cast<void*>(mob));
+			plweak->status(Player::STATUS_COMBAT);
+			combat_mobs_.insert(mob);
+			combat_players_.insert(plweak);
+
+			break;
+		}
+	}
+
+	// combat handler
+	if (mob->status() == Mob::STATUS_COMBAT)
+	{
+		Player* target = static_cast<Player*>(mob->target());
+
+		if (target == NULL)
+		{
+			LOG_E(tag_) << "mobs target is NULL";
+			mob->status(Mob::STATUS_IDLE);
+		}
+		else if (target->cube() != mob->loc())
+		{
+			LOG_E(tag_) << "mob " << mob->id() << " target is in other cube";
+			mob->status(Mob::STATUS_IDLE);
+		}
+		else
+		{
+			int_fast32_t plhp = target->hp();
+			int_fast32_t mobattack = 1;
+
+			if (plhp < mobattack)
+			{
+				plhp = 0;
+
+				target->hp(plhp);
+
+				Event* event = new Event();
+				event->type_ = Event::TYPE_MOB_ATTACK;
+				event->range_ = Event::RANGE_PRIVATE;
+				event->player(*target);
+				event->mob_ = mob;
+				event->i32parm = mobattack;
+				events.push_back(event);
+
+				// erase the player from combat_players
+				combat_players_.erase(target);
+
+				// erase the mob from combat_players
+				combat_mobs_.erase(mob);
+				mob->status(Mob::STATUS_IDLE);
+
+				// send player back to reset point
+				reborn( target, events);
+
+				LOG_I(tag_) << "player dead in dmg " << mobattack;
+			}
+			else
+			{
+				plhp = plhp - mobattack;
+				LOG_I(tag_) << "player dmg " << mobattack << " hp:" << plhp;
+
+				target->hp(plhp);
+
+				Event* event = new Event();
+				event->type_ = Event::TYPE_MOB_ATTACK;
+				event->range_ = Event::RANGE_PRIVATE;
+				event->player(*target);
+				event->mob_ = mob;
+				event->i32parm = mobattack;
+				events.push_back(event);
+			}
+		}
+	}
+
+	// move handler, mob can only move when in status idle
+	if (mob->status() == Mob::STATUS_IDLE)
+	{
+		Cube* dest = NULL;
+		
+		unsigned int next_move_count = mob->next_move_count();
+		unsigned int max_move_tick = mob->max_move_tick();
+		unsigned int min_move_tick = mob->min_move_tick();
+		
+		if (mob->random_path() == true)
+		{			
+			if (next_move_count == 0)
+			{
+				// move randomly, move to the cube that allows mob
+				// TODO: how about other type?
+				int dir = mob->loc()->random_exit(Cube::MOB_CUBE);
+				dest = mob->loc()->find(cubes_, dir);
+				mob->next_move_count(
+					(rand() % (max_move_tick - min_move_tick + 1))
+					+ min_move_tick);			
+			}
+			else
+			{
+				mob->next_move_count(next_move_count - 1);
+			}
+		}
+		else if (mob->path_size() > 0)
+		{
+			if (next_move_count == 0)
+			{
+				dest = mob->next_path();
+				mob->next_move_count(
+					(rand() % (max_move_tick - min_move_tick + 1))
+					+ min_move_tick);
+			}
+			else
+			{
+				mob->next_move_count(next_move_count - 1);
+			}
+		}
+		else
+		{
+			// not allow to move
+		}
+
+		if (dest != NULL)
+		{
+			LOG_I(tag_) << "m" << mob->id() << " " << mob->loc()->loc().str() << "->" << dest->loc().str();
+			// generate event
+			Event* event = new Event();
+			event->type_ = Event::TYPE_MOB_LEAVE;
+			event->range_ = Event::RANGE_CUBE;
+			event->eventcube_ = mob->loc();
+			event->subcube_ = dest;
+			event->mob_ = mob;
+			events.push_back(event);
+
+			event = new Event();
+			event->type_ = Event::TYPE_MOB_ARRIVE;
+			event->range_ = Event::RANGE_CUBE;
+			event->eventcube_ = dest;
+			event->subcube_ = mob->loc();
+			event->mob_ = mob;
+			events.push_back(event);
+
+			// move mob
+			mob->loc(dest);
+		}
+	}
+
+	return OcError::E_SUCCESS;
 }

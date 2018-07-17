@@ -25,11 +25,27 @@ octillion::JsonW* octillion::Player::json( int type )
         jobject->add("cha", cha_);
         jobject->add("status", status_);
 
+	case Event::TYPE_JSON_DETAIL_WITH_LOC:
+		jobject->add("con", con_);
+		jobject->add("men", men_);
+		jobject->add("luc", luc_);
+		jobject->add("cha", cha_);
+		jobject->add("status", status_);
+		jobject->add("loc", cube_->json(Event::TYPE_JSON_SIMPLE));
+		break;
+
     case Event::TYPE_JSON_SIMPLE:
         jobject->add("id", (int)id_);
         jobject->add("gender", gender_);
         jobject->add("cls", cls_);
         break;
+	
+	case Event::TYPE_JSON_SIMPLE_WITH_LOC:
+		jobject->add("id", (int)id_);
+		jobject->add("gender", gender_);
+		jobject->add("cls", cls_);
+		jobject->add("loc", cube_->json(Event::TYPE_JSON_SIMPLE));
+		break;
     }
 
     return jobject;
