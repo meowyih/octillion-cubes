@@ -10,43 +10,76 @@
 
 #include "jsonw/jsonw.hpp"
 
-// parameter type
-// 1 - simple, for login/logout/arrive/leave event usage
-// 2 - detail, for see event usage
-octillion::JsonW* octillion::Player::json( int type )
+void octillion::Player::status(int status)
+{
+	if (status_ == status)
+		return;
+
+	if (status_ == STATUS_IDLE)
+	{
+		if (status == STATUS_COMBAT)
+		{
+			// fight!
+		}
+		else
+		{
+			LOG_W(tag_) << "status(), missing " << status_ << "->" << status << " handler";
+		}
+	}
+	else if (status_ = STATUS_COMBAT)
+	{
+		if (status == STATUS_IDLE)
+		{
+			target_ = NULL;
+		}
+		else
+		{
+			LOG_W(tag_) << "status(), missing " << status_ << "->" << status << " handler";
+		}
+	}
+	else
+	{
+		LOG_W(tag_) << "status() set unknown status:" << status;
+		return;
+	}
+
+	status_ = status;
+}
+
+octillion::JsonW* octillion::Player::json(uint_fast32_t type )
 {
     JsonW* jobject = new JsonW();
-    switch (type)
-    {
-    case Event::TYPE_JSON_DETAIL:
-        jobject->add("con", con_);
-        jobject->add("men", men_);
-        jobject->add("luc", luc_);
-        jobject->add("cha", cha_);
-        jobject->add("status", status_);
 
-	case Event::TYPE_JSON_DETAIL_WITH_LOC:
+	jobject->add("id", (int)id_);
+	jobject->add("status", status_);
+
+	if ((type & J_HP) != 0)
+	{
+		JsonW* jarray = new JsonW();
+		jarray->add((int)hp());
+		jarray->add((int)maxhp());
+		jobject->add(u8"hp", jarray);
+	}
+
+	if ((type & J_CUBE) != 0)
+	{
+		jobject->add("loc", cube_->json(0));
+	}
+
+	if ((type & J_ATTR) != 0)
+	{
+		jobject->add("gender", gender_);
+		jobject->add("cls", cls_);
 		jobject->add("con", con_);
 		jobject->add("men", men_);
 		jobject->add("luc", luc_);
 		jobject->add("cha", cha_);
-		jobject->add("status", status_);
-		jobject->add("loc", cube_->json(Event::TYPE_JSON_SIMPLE));
-		break;
+	}
 
-    case Event::TYPE_JSON_SIMPLE:
-        jobject->add("id", (int)id_);
-        jobject->add("gender", gender_);
-        jobject->add("cls", cls_);
-        break;
-	
-	case Event::TYPE_JSON_SIMPLE_WITH_LOC:
-		jobject->add("id", (int)id_);
-		jobject->add("gender", gender_);
-		jobject->add("cls", cls_);
-		jobject->add("loc", cube_->json(Event::TYPE_JSON_SIMPLE));
-		break;
-    }
+	if ((type & J_DISPLAY) != 0)
+	{
+		jobject->add("name", username_);
+	}
 
     return jobject;
 }

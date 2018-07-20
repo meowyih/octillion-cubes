@@ -234,6 +234,31 @@ octillion::Command::Command( int fd, uint8_t* data, size_t datasize )
         valid_ = true;
         break;
 
+	case GET_SERVER_VERSION:
+		valid_ = true;
+		break;
+
+	case GET_GLOBAL_DATA_STAMP:
+		valid_ = true;
+		break;
+
+	case GET_GLOBAL_DATA:
+		valid_ = true;
+		break;
+
+	case GET_AREA_DATA:
+		jvalue = json_.get(u8"i1");
+		if (jvalue == NULL || jvalue->type() != JsonW::INTEGER)
+		{
+			LOG_E(tag_) << "cons, cmd DOWNLOAD_AREA_JSON has no i1" << json_;
+			return;
+		}
+
+		uiparm = (uint_fast32_t)(jvalue->integer());
+		uiparms_.push_back(uiparm);
+		valid_ = true;
+		break;
+
     default:
         // unknown cmd
         return;

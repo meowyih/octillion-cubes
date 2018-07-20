@@ -24,19 +24,23 @@
     "mobs":
     [
         {
+			"id":1,
             "level": 1,
             "race": 1,
             "subrace": 0,            
-            "loc": "under00"
+            "loc": "under01"
         },
         {
+			"id":2,
             "level": 1,
             "race": 1,
             "subrace": 0,
-            "loc": "under00", 
+            "loc": "under01", 
 			"short": "custom mob",
+			"long": "custom mob with long long description",
 			"combat_type" : 3,
 			"random": true,
+			"movetick": [5, 10],
             "path":
             [
                 "under00",

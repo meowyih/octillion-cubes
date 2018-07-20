@@ -5,8 +5,10 @@
 #include <string>
 #include <system_error>
 #include <map>
+#include <set>
 
 #include "jsonw/jsonw.hpp"
+#include "world/creature.hpp"
 
 #ifdef MEMORY_DEBUG
 #include "memory/memleak.hpp"
@@ -124,6 +126,9 @@ public:
 	const static uint_fast32_t NPC_CUBE = 0x2;
 	const static uint_fast32_t GOD_CUBE = 0x80000000;
 
+	const static uint_fast32_t J_PLAYER = 0x01;
+	const static uint_fast32_t J_MOB = 0x02;
+
 public:
     Cube(const CubePosition& loc);
     Cube(const CubePosition& loc, const std::string& title, int areaid, uint_fast32_t attr );
@@ -147,7 +152,6 @@ public:
 	// return -1 if no allowed enter
 	int random_exit(uint8_t exit_mask)
 	{
-		bool has5 = false;
 		std::vector<int> candidate;
 		for (int idx = 0; idx < 6; idx++)
 		{
@@ -242,8 +246,14 @@ private:
     CubePosition loc_;
     std::string title_;
 
+	std::set<Creature*>* mobs_ = NULL;
+	std::set<Creature*>* players_ = NULL;
+
 public:
 	uint_fast32_t exits_[6];
+
+	friend class World;
+
 
 #ifdef MEMORY_DEBUG
 public:
@@ -311,11 +321,16 @@ public:
     static bool readloc( const JsonW* jvalue, CubePosition& pos, uint_fast32_t offset_x, uint_fast32_t offset_y, uint_fast32_t offset_z );
 	static bool addlink(bool is_2way, Cube* from, Cube* to, uint_fast32_t attr );
     static bool addlink( bool is_2way, Cube* from, Cube* to);
+
 private:
     bool valid_ = false;
     int id_;
     uint_fast32_t offset_x_, offset_y_, offset_z_;
     std::string title_;
+
+private:
+
+	friend class World;
 
 #ifdef MEMORY_DEBUG
 public:

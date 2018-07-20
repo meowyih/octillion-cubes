@@ -7,6 +7,7 @@
 #include <string>
 
 #include "world/cube.hpp"
+#include "world/creature.hpp"
 #include "jsonw/jsonw.hpp"
 
 #ifdef MEMORY_DEBUG
@@ -22,50 +23,34 @@ namespace octillion
     class Player;
 }
 
-class octillion::Player
+class octillion::Player : public octillion::Creature
 {
 private:
-    const std::string tag_ = "Player";
+	const std::string tag_ = "Player";
 
-public: 
-    // Gender
-    const static int GENDER_NEUTRAL = 0;
-    const static int GENDER_MALE = 1;
-    const static int GENDER_FEMALE = 2;
+public:
+	// Gender
+	const static int GENDER_NEUTRAL = 0;
+	const static int GENDER_MALE = 1;
+	const static int GENDER_FEMALE = 2;
 
-    // Class
-    const static int CLS_SKILLER = 1;
-    const static int CLS_BELIEVER = 2;
+	// Class
+	const static int CLS_SKILLER = 1;
+	const static int CLS_BELIEVER = 2;
 
 	// status
 	const static int STATUS_IDLE = 0;
 	const static int STATUS_COMBAT = 1;
+
+	// json mask
+	const static uint_fast32_t J_HP = 0x1;
+	const static uint_fast32_t J_CUBE = 0x2;
+	const static uint_fast32_t J_ATTR = 0x4;
+	const static uint_fast32_t J_DISPLAY = 0x8;
+
 public:
-    Player() :
-        status_(0), id_(0), 
-        gender_(0), cls_(0), 
-        con_(0), men_(0), luc_(0), cha_(0) {}
 
-    Player(uint_fast32_t id) :
-        status_(0), id_(id), 
-        gender_(0), cls_(0), 
-        con_(0), men_(0), luc_(0), cha_(0) {}
-
-    Player(uint_fast32_t id, 
-        int gender, int cls, 
-        int con, int men, int luc, int cha,
-        std::string username, std::string password) :
-        status_(0), id_(id), 
-        gender_(gender), cls_(cls), 
-        con_(con), men_(men), luc_(luc), cha_(cha), 
-        username_(username), password_(password) {}
-
-    explicit Player(const Player& rhs) :
-        status_(rhs.status_), id_(rhs.id_), 
-        gender_(rhs.gender_), cls_(rhs.cls_), 
-        con_(rhs.con_), men_(rhs.men_), luc_(rhs.luc_), cha_(rhs.cha_), 
-        cube_(rhs.cube_),
-        username_(rhs.username_), password_(rhs.password_) {}
+	Player() { hp_ = 100; maxhp_ = hp_; }
 
     Player& operator = (const Player& rhs)
     {
@@ -80,7 +65,9 @@ public:
         luc_ = rhs.luc_;
         cha_ = rhs.cha_;
 		hp_ = rhs.hp_;
+		maxhp_ = rhs.maxhp_;
         cube_ = rhs.cube_;
+		cube_reborn_ = rhs.cube_reborn_;
 
         username_ = rhs.username_;
         password_ = rhs.password_;
@@ -95,7 +82,7 @@ public:
     std::string username() { return username_; }
     std::string password() { return password_; }
     int status() { return status_; }
-    uint_fast32_t id() { return id_; }
+    int_fast32_t id() { return id_; }
     int cls() { return cls_; }
     int gender() { return gender_; }
     int con() { return con_; }
@@ -103,7 +90,7 @@ public:
     int luc() { return luc_; }
     int cha() { return cha_; }
 	int lvl() { return lvl_; }
-	uint_fast32_t hp() { return hp_; }
+	
 	void* target() { return target_; }
     int fd() { return fd_; }
     Cube* cube() { return cube_; }
@@ -111,7 +98,7 @@ public:
     
     void username(std::string username) { username_ = username; }
     void password(std::string password) { password_ = password; }
-    void status(int status) { status_ = status; }
+	void status(int status);
     void id(uint_fast32_t id) { id_ = id; }
     void cls(int cls) { cls_ = cls; }
     void gender(int gender) { gender_ = gender; }
@@ -120,8 +107,8 @@ public:
     void luc(int luc) { luc_ = luc; }
     void cha(int cha) { cha_ = cha;  }
 	void lvl(int lvl) { lvl_ = lvl; }
-	void hp(uint_fast32_t hp) { hp_ = hp; }
-	void target( void* mob ) { target_ = mob; }
+
+	void target( Creature* mob ) { target_ = mob; }
     void fd(int fd) { fd_ = fd; }
     void cube(Cube* cube) { cube_ = cube; }
 	void cube_reborn(Cube* cube) { cube_reborn_ = cube; }
@@ -146,24 +133,23 @@ public:
     // parameter type
     // 1 - Event::TYPE_JSON_SIMPLE, for login/logout/arrive/leave event usage
     // 2 - Event::TYPE_JSON_DETAIL, for detail event usage
-    JsonW* json( int type );
+    JsonW* json( uint_fast32_t type ) override;
     
 private:
     int fd_ = 0;
     std::string username_;
     std::string password_;
-    int status_;
-    uint_fast32_t id_;
-    int cls_;
-    int gender_;
-    int con_, men_, luc_, cha_;
-	int lvl_;
+    int status_ = 0;
+    int_fast32_t id_ = 0;
+    int cls_ = 0;
+    int gender_ = 0;
+    int con_ = 0, men_ = 0, luc_ = 0, cha_ = 0;
+	int lvl_ = 0;
 
-	uint_fast32_t hp_ = 10;
-    void* target_; // a Mob
+    Creature* target_ = NULL; // a Mob
     
-	Cube* cube_; // shortcut to the cube_
-	Cube* cube_reborn_;
+	Cube* cube_ = NULL; // shortcut to the cube_
+	Cube* cube_reborn_ = NULL;
 
 #ifdef MEMORY_DEBUG
 public:

@@ -21,6 +21,7 @@ OBJS = $(addprefix $(OBJDIR)/, \
        filedatabase.o \
        event.o \
        memleak.o \
+       mob.o \
        )
 
 TARGET = exe

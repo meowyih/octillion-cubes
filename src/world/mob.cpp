@@ -114,7 +114,7 @@ octillion::Mob::Mob(const JsonW* jmob)
 octillion::Mob::Mob(
 	int areaid, int order,
 	const JsonW* jmob,
-	const std::map<uint_fast32_t, Mob*>& default,
+	const std::map<uint_fast32_t, Mob*>& default_config,
 	const std::map<int, std::map<std::string, Cube*>*>& area_marks,
 	const std::map<CubePosition, Cube*>& cubes,
 	CubePosition goffset
@@ -127,12 +127,14 @@ octillion::Mob::Mob(
 		return;
 	}
 
-	JsonW *jlevel, *jrace, *jsubrace, *jctype;
+	JsonW *jid, *jlevel, *jrace, *jsubrace, *jctype;
 	JsonW *jshort, *jlong;
+	JsonW* jreborn;
 	JsonW *jloc, *jpath, *jmtick, *jrandom;
 
 	Mob* mob_default = NULL;
 
+	jid = jmob->get(u8"id");
 	jlevel = jmob->get(u8"level");
 	jrace = jmob->get(u8"race");
 	jsubrace = jmob->get(u8"subrace");
@@ -141,12 +143,15 @@ octillion::Mob::Mob(
 	jshort = jmob->get(u8"short");
 	jlong = jmob->get(u8"long");
 
+	jreborn = jmob->get(u8"reborn");
+
 	jloc = jmob->get(u8"loc");
 	jmtick = jmob->get(u8"movetick");
 	jpath = jmob->get(u8"path");
 	jrandom = jmob->get(u8"random");
 
-	if (jlevel == NULL || jlevel->type() != JsonW::INTEGER || 
+	if (jid == NULL || jid->integer() == 0 || jid->integer() > 0xFFFF ||
+		jlevel == NULL || jlevel->type() != JsonW::INTEGER || 
 		jrace == NULL || jrace->type() != JsonW::INTEGER || 
 		jloc == NULL )
 	{
@@ -156,7 +161,7 @@ octillion::Mob::Mob(
 
 	// 0x0001 0002 - area 1, local id 2 
 	area_ = areaid;
-	id_ = order;
+	id_ = (int)jid->integer();
 	lvl_ = (int)jlevel->integer();
 	race_ = (int)jrace->integer();
 
@@ -165,8 +170,8 @@ octillion::Mob::Mob(
 		subrace_ = (int)jsubrace->integer();
 	}	
 
-	auto itmob = default.find(type());
-	if (itmob != default.end())
+	auto itmob = default_config.find(type());
+	if (itmob != default_config.end())
 	{
 		mob_default = itmob->second;
 	}
@@ -204,8 +209,14 @@ octillion::Mob::Mob(
 		long_ = short_;
 	}
 
-	loc_ = readloc(areaid, jloc, area_marks, cubes, goffset);
-	if (loc_ == NULL)
+	if (jreborn != NULL && jreborn->integer() > 0 )
+	{
+		max_reborn_tick_ = (int) jreborn->integer();
+		next_reborn_count_ = max_reborn_tick_;
+	}
+
+	cube_ = readloc(areaid, jloc, area_marks, cubes, goffset);
+	if (cube_ == NULL)
 	{
 		LOG_E(tag_) << " bad json without valid loc " << jloc->text();
 		return;
@@ -247,30 +258,6 @@ octillion::Mob::Mob(
 	}
 
 	valid_ = true;
-
-	/*
-	{
-		"local_id": 1,
-
-		"level" : 12,
-		"race" : 2,
-		"subrace" : 1,
-		"combat_type" : 42,
-
-		"short" : "test mob#1",
-		"long" : "A ghost like monster flies in the air",
-
-		"loc" : [1, 4, 4],
-		"movetick" : [5, 10],
-		"path" :
-		[
-			"contral room",
-			[1, 4, 4],
-			[4, 7, 7],
-			"underground-12"
-		]
-	}
-	*/
 }
 
 octillion::Cube* octillion::Mob::next_path()
@@ -347,17 +334,90 @@ octillion::Cube* octillion::Mob::readloc(
 	return loc;
 }
 
-octillion::JsonW* octillion::Mob::json(int type)
+void octillion::Mob::status(int status)
+{
+	if (status == status_)
+		return;
+
+	if (status_ == STATUS_IDLE)
+	{
+		if (status == STATUS_COMBAT)
+		{
+		}
+		else if (status == STATUS_GHOST)
+		{
+			LOG_W(tag_) << "status, unexpected IDLE -> GHOST";
+		}
+		else
+		{
+			LOG_W(tag_) << "status(), missing " << status_ << "->" << status << " handler";
+		}
+	}
+	else if (status_ == STATUS_COMBAT)
+	{
+		if (status == STATUS_GHOST)
+		{
+			// dead
+			target_ = NULL;
+			hp_ = maxhp_;
+		}
+		else if (status == STATUS_IDLE)
+		{
+			// kill player
+			target_ = NULL;
+			hp_ = hp_ + maxhp_ / 20; // recover 20% after each kill
+			if (hp_ > maxhp_)
+			{
+				hp_ = maxhp_;
+			}
+		}
+		else
+		{
+			LOG_W(tag_) << "status(), missing " << status_ << "->" << status << " handler";
+		}
+	}
+	else if (status_ == STATUS_GHOST)
+	{
+		if (status == STATUS_COMBAT)
+		{
+			LOG_W(tag_) << "status, unexpected GHOST -> COMBAT";
+		}
+		else if (status == STATUS_IDLE)
+		{
+			// nothing, keep walking
+		}
+		else
+		{
+			LOG_W(tag_) << "status(), missing " << status_ << "->" << status << " handler";
+		}
+	}
+	else
+	{
+		LOG_W(tag_) << "status() set unknown status:" << status;
+		return;
+	}
+
+	status_ = status;
+}
+
+octillion::JsonW* octillion::Mob::json(uint_fast32_t type)
 {
 	JsonW* jobject = new JsonW();
-	switch (type)
+
+	jobject->add("id", id_);
+	jobject->add("area", area_ );
+
+	if ((type & J_HP) != 0)
 	{
-	case Event::TYPE_JSON_DETAIL:
-	case Event::TYPE_JSON_SIMPLE:
-		jobject->add("id", id_);
-		jobject->add("area", area_);
-		jobject->add("hp", (long long)hp_);
-		break;
+		JsonW* jarray = new JsonW();
+		jarray->add(hp());
+		jarray->add( maxhp() );
+		jobject->add(u8"hp", jarray);
+	}
+
+	if ((type & J_CUBE) != 0)
+	{
+		jobject->add("loc", cube_->json(0));
 	}
 
 	return jobject;

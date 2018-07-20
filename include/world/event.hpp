@@ -27,11 +27,16 @@ public:
 	const static int TYPE_UNKNOWN = 0;
 
 	const static int TYPE_PLAYER_LOGIN = 1;
-	const static int TYPE_PLAYER_LOGOUT = 2;
+	const static int TYPE_PLAYER_LOGIN_PRIVATE = 2;
+	const static int TYPE_PLAYER_LOGOUT = 3;
 	const static int TYPE_PLAYER_ARRIVE = 10;
-	const static int TYPE_PLAYER_LEAVE = 11;
-	const static int TYPE_PLAYER_DEAD = 12;
-	const static int TYPE_PLAYER_REBORN = 13;
+	const static int TYPE_PLAYER_ARRIVE_PRIVATE = 11;
+	const static int TYPE_PLAYER_LEAVE = 12;
+	const static int TYPE_PLAYER_DEAD = 13;
+	const static int TYPE_PLAYER_REBORN = 14;
+	const static int TYPE_PLAYER_REBORN_PRIVATE = 15;
+
+	const static int TYPE_PLAYER_ATTACK = 16;
 
 	const static int TYPE_MOB_REBORN = 20;
 	const static int TYPE_MOB_DEAD = 21;
@@ -48,23 +53,16 @@ public:
 public:
     JsonW* json();
 
-    // player_ is an object that might be deleted after logout, so
-    // we need to make a copy in event
-    void player(const Player& player)
-    {
-        player_ = player;
-    }
-
 public:
     int range_ = RANGE_NONE;
     int type_ = TYPE_UNKNOWN;
-    Player player_;
+    Player* player_;
     int areaid_;
     Cube* eventcube_ = NULL;
     Cube* subcube_ = NULL;
     int direction_;
 	Mob* mob_;
-	int_fast32_t i32parm;
+	int_fast32_t i32parm_;
 
 
 #ifdef MEMORY_DEBUG

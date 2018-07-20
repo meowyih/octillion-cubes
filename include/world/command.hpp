@@ -53,6 +53,11 @@ public:
     const static int LOGIN = 19;
     const static int LOGOUT = 20;
 
+	const static int GET_SERVER_VERSION = 900;
+	const static int GET_GLOBAL_DATA_STAMP = 901;
+	const static int GET_GLOBAL_DATA = 902;
+	const static int GET_AREA_DATA = 903;
+
     // movement
     const static int MOVE_NORMAL = 40;
 
@@ -66,6 +71,7 @@ public:
     const static int E_CMD_BAD_FORMAT = 101;
     const static int E_CMD_TOO_COMMON_NAME = 102;
     const static int E_CMD_WRONG_USERNAME_PASSWORD = 103;
+	const static int E_CMD_FILE_IO_ERROR = 104;
         
 public:  
     Command( int fd, int cmd );

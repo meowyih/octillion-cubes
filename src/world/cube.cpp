@@ -3,6 +3,7 @@
 #include <cstring> // memset
 #include <system_error>
 #include <map>
+#include <set>
 #include <cstdlib> // rand()
 
 #include "world/cube.hpp"
@@ -159,16 +160,37 @@ bool octillion::Cube::addlink(Cube* dest)
 // 2 - Event::TYPE_JSON_DETAIL, for detail event usage
 octillion::JsonW* octillion::Cube::json(int type)
 {
-    JsonW* jobject = new JsonW();
-    switch (type)
-    {
-    case Event::TYPE_JSON_DETAIL:
-    case Event::TYPE_JSON_SIMPLE:
-        jobject->add("loc", loc_.json() );
-        jobject->add("area", areaid_);
-        break;
-    }
+	JsonW* jobject = new JsonW();
+    jobject->add("loc", loc_.json() );
+    jobject->add("area", areaid_);
 
+	if ((type & J_PLAYER) != 0)
+	{
+		if (players_ != NULL && players_->size() > 0)
+		{
+			JsonW* jarray = new JsonW();
+			for (auto& it : *players_)
+			{
+				Player* player = static_cast<Player*>(it);
+				jarray->add(player->json(0));
+			}
+			jobject->add(u8"players", jarray);
+		}
+	}
+
+	if ((type & J_MOB) != 0)
+	{
+		if (mobs_ != NULL && mobs_->size() > 0)
+		{
+			JsonW* jarray = new JsonW();
+			for (auto& it : *mobs_)
+			{
+				Mob* mob = static_cast<Mob*>(it);
+				jarray->add(mob->json(0));
+			}
+			jobject->add(u8"mobs", jarray);
+		}
+	}
     return jobject;
 }
 
