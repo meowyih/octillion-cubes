@@ -74,11 +74,11 @@ std::error_code octillion::RawProcessor::senddata( int fd, uint8_t* data, size_t
     uint_fast32_t header = htonl( datasize );
     uint8_t key[RawProcessorClient::kRawProcessorMaxKeyPoolSize];
     size_t keysize = (datasize % ( RawProcessorClient::kRawProcessorMaxKeyPoolSize - 1 )) + 1;
-    uint8_t* buffer = new uint8_t[sizeof(uint_fast32_t) + datasize];
+    uint8_t* buffer = new uint8_t[sizeof(uint32_t) + datasize];
     std::error_code error;
     
-    memcpy( (void*) buffer, (const void*)&header, sizeof(uint_fast32_t));
-    memcpy( (void*) ( buffer + sizeof( uint_fast32_t )), 
+    memcpy( (void*) buffer, (const void*)&header, sizeof(uint32_t));
+    memcpy( (void*) ( buffer + sizeof(uint32_t)),
             (const void*) data, datasize );
 
     for ( size_t i = 0; i < keysize; i ++ )
@@ -86,10 +86,10 @@ std::error_code octillion::RawProcessor::senddata( int fd, uint8_t* data, size_t
         key[i] = kRawProcessorKeyPool[ (datasize + i) % kRawProcessorKeyPoolSize];
     }
     
-    encrypt( (uint8_t*)(buffer + sizeof( uint_fast32_t )), datasize, key, keysize );
+    encrypt( (uint8_t*)(buffer + sizeof(uint32_t)), datasize, key, keysize );
     
-    LOG_D(tag_) << "senddata, fd:" << fd << " size:" << sizeof(uint_fast32_t) + datasize;   
-    error = CoreServer::get_instance().senddata( fd, (const void*)buffer, sizeof( uint_fast32_t ) + datasize );
+    LOG_D(tag_) << "senddata, fd:" << fd << " size:" << sizeof(uint32_t) + datasize;
+    error = CoreServer::get_instance().senddata( fd, (const void*)buffer, sizeof(uint32_t) + datasize );
 
     // to suuport memleak.h
     delete [] buffer;

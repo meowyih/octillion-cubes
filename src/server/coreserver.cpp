@@ -424,9 +424,29 @@ void octillion::CoreServer::core_task()
                !(events[i].events & EPOLLIN)) 
             {
                 // error occurred, disconnect this fd
+                if (events[i].events & EPOLLERR)
+                {
+                    LOG_D(tag_) << "core_task, EPOLLERR close socket fd: " << events[i].data.fd;
+                    int       error = 0;
+                    socklen_t errlen = sizeof(error);
+                    if (getsockopt(events[i].data.fd, SOL_SOCKET, SO_ERROR, (void *)&error, &errlen) == 0)
+                    {
+                        printf("error = %s\n", strerror(error));
+                    }
+                }
+                else if (events[i].events & EPOLLHUP)
+                {
+                    LOG_D(tag_) << "core_task, EPOLLHUP close socket fd: " << events[i].data.fd;
+                }
+                else if (!(events[i].events & EPOLLIN))
+                {
+                    LOG_D(tag_) << "core_task, ! EPOLLIN close socket fd: " << events[i].data.fd;
+                }
+                else
+                {
+                    LOG_D(tag_) << "core_task, unknown EPOLL event, close socket fd: " << events[i].data.fd;
+                } 
                 closesocket( events[i].data.fd ); 
-
-                LOG_D(tag_) << "core_task, close socket fd: " << events[i].data.fd;
                 continue;
             }
             else if ( server_fd_ == events[i].data.fd )
