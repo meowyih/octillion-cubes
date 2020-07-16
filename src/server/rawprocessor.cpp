@@ -4,13 +4,9 @@
 #include <cstdint>
 #include <string>
 
-#ifdef WIN32
-#include <Winsock2.h>
-#else
 #include <netinet/in.h>
-#endif
 
-#include "server/coreserver.hpp"
+#include "server/sslserver.hpp"
 #include "server/rawprocessor.hpp"
 #include "error/macrolog.hpp"
 #include "error/ocerror.hpp"
@@ -89,7 +85,7 @@ std::error_code octillion::RawProcessor::senddata( int fd, uint8_t* data, size_t
     encrypt( (uint8_t*)(buffer + sizeof(uint32_t)), datasize, key, keysize );
     
     LOG_D(tag_) << "senddata, fd:" << fd << " size:" << sizeof(uint32_t) + datasize;
-    error = CoreServer::get_instance().senddata( fd, (const void*)buffer, sizeof(uint32_t) + datasize );
+    error = SslServer::get_instance().senddata( fd, (const void*)buffer, sizeof(uint32_t) + datasize );
 
     // to suuport memleak.h
     delete [] buffer;
@@ -104,7 +100,7 @@ std::error_code octillion::RawProcessor::senddata( int fd, uint8_t* data, size_t
 
 std::error_code octillion::RawProcessor::closefd(int fd)
 {
-    CoreServer::get_instance().requestclosefd(fd);
+    SslServer::get_instance().requestclosefd(fd);
     return OcError::E_SUCCESS;
 }
 

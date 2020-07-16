@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <string>
 
-#include "server/coreserver.hpp"
+#include "server/sslserver.hpp"
 
 #ifdef MEMORY_DEBUG
 #include "memory/memleak.hpp"
@@ -75,7 +75,7 @@ public:
 #endif
 };
 
-class octillion::RawProcessor : public octillion::CoreServerCallback
+class octillion::RawProcessor : public octillion::SslServerCallback
 {
     private:
         const static std::string tag_; // defined in rawprocessor.cpp
@@ -85,7 +85,7 @@ class octillion::RawProcessor : public octillion::CoreServerCallback
         ~RawProcessor();
         
     public:
-        // virtual function from CoreServerCallback that handlers all incoming events
+        // virtual function from SslServerCallback that handlers all incoming events
         virtual void connect( int fd ) override;
         virtual int recv( int fd, uint8_t* data, size_t datasize) override;
         virtual void disconnect( int fd ) override;

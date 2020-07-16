@@ -168,9 +168,6 @@ private:
     int line_;
 };
 
-// #define new Memleak(__FILE__,__LINE__) << new
-// #define delete Memleak(__FILE__,__LINE__) >>
-
 void* operator new(size_t size);
 
 void* operator new[](size_t size);
@@ -179,9 +176,10 @@ void operator delete(void* p);
 
 void operator delete[](void* p);
 
-#if 0
+#if 0 // change this flag to override the new/delete and make it work
 void* operator new(size_t size, const char* file, int line)
 {
+    std::cout << "new " << size << " bytes" << std::endl;
     void* memory = MALLOC(size);
 
     MemleakRecorder::instance().alloc(file, line, memory);
@@ -191,6 +189,7 @@ void* operator new(size_t size, const char* file, int line)
 
 void* operator new[](size_t size, const char* file, int line)
 {
+    std::cout << "new[] " << size << " bytes" << std::endl;
     void* memory = MALLOC(size);
 
     MemleakRecorder::instance().alloc(file, line, memory);
@@ -200,6 +199,7 @@ void* operator new[](size_t size, const char* file, int line)
 
 void operator delete(void* p)
 {
+    std::cout << "delete " << std::endl;
     MemleakRecorder::instance().release(p);
     FREE(p);
 }
