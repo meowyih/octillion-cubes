@@ -4,6 +4,7 @@
 #include <thread>
 #include <map>
 #include <mutex>
+#include <memory>
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -15,46 +16,41 @@
 #include <errno.h>
 #include <sys/epoll.h>
 
-#include <openssl/ssl.h>
-#include <openssl/err.h>
-
 #include "error/ocerror.hpp"
 #include "error/macrolog.hpp"
-#include "server/sslserver.hpp"
+#include "server/server.hpp"
 
-octillion::SslServer::SslServer()
+octillion::Server::Server()
 {   
-    LOG_D(tag_) << "SslServer()";
+    LOG_D(tag_) << "Server()";
     
     is_running_ = false;
 }
 
-octillion::SslServer::~SslServer()
+octillion::Server::~Server()
 {   
     // not to block the thread by core_thread_.join()
-    // caller should use stop() before delete the SslServer from memory
+    // caller should use stop() before delete the Server from memory
     core_thread_flag_ = false;
-    core_thread_ = NULL;
+    core_thread_.reset();
     
     // clean up SSL_write retry waiting list
     // for (auto it = out_data_.begin(); it != out_data_.end(); ++it ) 
     // {
-    //    LOG_W( tag_ ) << "~SslServer, remove waiting list fd:" << (*it).fd;
-    //    delete [] (*it).data;
+    //     LOG_W( tag_ ) << "~Server, remove waiting list fd:" << (*it).fd;
+    //     delete [] (*it).data;
     // }
     out_data_.clear();
     
-    LOG_D(tag_) << "~SslServer()";
+    LOG_D(tag_) << "~Server()";
 }
 
-std::error_code octillion::SslServer::start( std::string port, std::string key, std::string cert )
+std::error_code octillion::Server::start( std::string port )
 {
     std::error_code error;
     struct epoll_event event;
     
     port_ = port;
-    key_ = key;
-    cert_ = cert;
         
     LOG_D(tag_) << "start() enter, port:" << port;
         
@@ -117,14 +113,16 @@ std::error_code octillion::SslServer::start( std::string port, std::string key, 
     core_thread_flag_ = true;
         
     LOG_D(tag_) << "start() launch server thread";
-    core_thread_ = std::make_unique<std::thread>( &SslServer::core_task, this );
+
+    // note: make_unique is not available until c++17
+    core_thread_ = std::make_unique<std::thread>( &Server::core_task, this );
     
     LOG_D(tag_) << "start() leave, return E_SUCCESS";
     
     return OcError::E_SUCCESS;
 }
 
-std::error_code octillion::SslServer::stop()
+std::error_code octillion::Server::stop()
 {
     LOG_D(tag_) << "stop() enter";
     
@@ -138,6 +136,7 @@ std::error_code octillion::SslServer::stop()
             LOG_I(tag_) << "stop() wait server thread die";
             core_thread_.get()->join();
         }
+        
         core_thread_.reset();
     }
     
@@ -146,51 +145,19 @@ std::error_code octillion::SslServer::stop()
     return OcError::E_SUCCESS;
 }
 
-void octillion::SslServer::core_task()
+void octillion::Server::core_task()
 {
     int epollret, ret;
-    struct epoll_event event;
+    struct epoll_event event;    
     // struct epoll_event* events;
     struct Socket socket;
     
     char recvbuf[512];
     
     is_running_ = true;
-        
+    
     std::unique_ptr<epoll_event[]> events 
-        = std::make_unique<epoll_event[]>( kEpollBufferSize ); 
-
-    // init SSL
-    SSL_load_error_strings();
-    OpenSSL_add_ssl_algorithms();
-    
-    SSL_CTX *ctx = SSL_CTX_new(SSLv23_server_method());
-    
-    if (!ctx) 
-    {
-        LOG_E(tag_) << "Unable to create SSL context";
-        core_thread_flag_ = false;
-    }
-    
-    SSL_CTX_set_ecdh_auto(ctx, 1);
-    
-    if (SSL_CTX_use_certificate_file(ctx, cert_.c_str(), SSL_FILETYPE_PEM) <= 0) 
-    {
-        LOG_E(tag_) << "Unable to set certificate";
-        core_thread_flag_ = false;
-    }
-    
-    if (SSL_CTX_use_PrivateKey_file(ctx, key_.c_str(), SSL_FILETYPE_PEM) <= 0 ) 
-    {
-        LOG_E(tag_) << "Unable to set private key";
-        core_thread_flag_ = false;
-    }
-    
-    // ssl
-    SSL *ssl = SSL_new( ctx );
-    SSL_set_accept_state( ssl );
-    SSL_set_fd( ssl, server_fd_ );
-    server_ssl_ = ssl;
+        = std::make_unique<epoll_event[]>( kEpollBufferSize );
     
     // epoll while loop
     while( core_thread_flag_ )
@@ -213,7 +180,7 @@ void octillion::SslServer::core_task()
             
         // write socket if writable and out_data_ have data
         out_data_lock_.lock();
-                
+
         for (auto it = out_data_.begin(); it != out_data_.end(); ) 
         {
             int ret;
@@ -237,58 +204,59 @@ void octillion::SslServer::core_task()
                 ++it;
                 continue;
             }
-                        
-            ret = SSL_write( itsocket->second.ssl, (*it).data->data(), (*it).data->size() );
             
-            if ( ret > 0 )
+            // ret = ::write( itsocket->second.fd, (*it).data, (*it).datalen );
+            ret = ::write( itsocket->second.fd, (*it).data->data(), (*it).data->size() );
+            
+            // if ( ret == (*it).datalen )
+            if ( ret == (*it).data->size() )
             {
-                LOG_D( tag_ ) << "core_task, SSL_write done, fd:" << (*it).fd;
+                LOG_D( tag_ ) << "core_task, write done, fd:" << (*it).fd;
                 // delete [] (*it).data;
                 (*it).data.reset();                
+                if ( (*it).closefd )
+                {
+                    requestclosefd( itsocket->second.fd );
+                }                
                 it = out_data_.erase(it);
             }
-            else 
+            else if ( ret >= 0 ) // partial write
             {
-                int sslerror = SSL_get_error( itsocket->second.ssl, ret );
+                // start to listen the EPOLLOUT event
+                LOG_D(tag_) << "fd:" << (*it).fd << " start to listen EPOLLOUT";
+                event.data.fd = (*it).fd;
+                event.events = EPOLLIN | EPOLLOUT | EPOLLET;
+                ret = epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, (*it).fd, &event);
+                itsocket->second.writable = false;
+                ++it;
                 
-                if ( sslerror == SSL_ERROR_WANT_READ  ||
-                    sslerror == SSL_ERROR_WANT_WRITE )
+                if ( ret > 0 )
                 {
-                    itsocket->second.writable = false;
-                    ++it;
-                    
-                    // start to listen the EPOLLOUT event
-                    LOG_D(tag_) << "fd:" << (*it).fd << " start to listen EPOLLOUT";
-                    event.data.fd = (*it).fd;
-                    event.events = EPOLLIN | EPOLLOUT | EPOLLET;
-                    ret = epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, (*it).fd, &event);
-                    
-                    if( ret == -1 )
-                    {
-                        // something really bad happens
-                        LOG_E(tag_) << "Error, epoll_ctl mod EPOLLOUT failed, fd " << (*it).fd 
-                           << " errno: " << errno
-                           << " message: " << strerror( errno );
-                        requestclosefd( (*it).fd );
-                    }
-                }
-                else
-                {
-                    // something bad happen, remove the data and close the socket later
-                    LOG_W( tag_ ) << "core_task, senddata failed, fd:" << (*it).fd;
-                    requestclosefd( (*it).fd );
+                    // copy the remaining partial data
+                    // size_t par_data_size = (*it).datalen - ret;                    
+                    // uint8_t* par_data = new uint8_t[par_data_size];
+                    // ::memcpy((void*)par_data, (*it).data + ret, par_data_size );
                     // delete [] (*it).data;
-                    (*it).data.reset();
-                    it = out_data_.erase(it);
+                    // (*it).data = par_data;
+                    // (*it).datalen = par_data_size;
                     
+                    std::shared_ptr<std::vector<uint8_t>> pdata
+                        = std::make_shared<std::vector<uint8_t>>(
+                        (*it).data->begin() + ret, (*it).data->end() );
+                    
+                    (*it).data.reset();
+                    (*it).data = pdata;
                 }
             }
-            
-            // disconnect the client in the next run if flag was set
-            if ( (*it).disconnect )
-            {
-                LOG_D(tag_) << "close fd:" << (*it).fd << " after write";
+            else 
+            { 
+                // something bad happen, remove the data and close the socket later
+                LOG_W( tag_ ) << "core_task, senddata failed, fd:" << (*it).fd << 
+                    " errno:" << errno << " " << strerror( errno );
                 requestclosefd( (*it).fd );
+                // delete [] (*it).data;
+                (*it).data.reset();
+                it = out_data_.erase(it);
             }
         }
         
@@ -309,7 +277,8 @@ void octillion::SslServer::core_task()
         {   
             // debug purpose
             LOG_D(tag_) << "epoll event " << i << "/" << epollret 
-                << " events:" << get_epoll_event( events[i].events );     
+                << " events:" << get_epoll_event( events[i].events )
+                << " fd:" << events[i].data.fd;     
             
             // handle the bad event
             if (( events[i].events & EPOLLERR ) ||
@@ -416,43 +385,27 @@ void octillion::SslServer::core_task()
                     {
                         // fatal error occurred
                         core_thread_flag_ = false;
-                        break;
-                        
                         LOG_E(tag_) << "core_task, failed to set socket to non-blocking, fd: " << infd 
                             << " errno: " << errno
                             << " message: " << strerror( errno );
-                    }
-
-                    // ssl
-                    SSL *ssl = SSL_new( ctx );                   
-                    SSL_set_accept_state( ssl );
-                    SSL_set_fd( ssl, infd );
-                                        
-                    ret = SSL_accept(ssl);
-                    
-                    if ( ret == 1 ||
-                       (SSL_get_error(ssl, ret) == SSL_ERROR_WANT_READ || 
-                        SSL_get_error(ssl, ret) == SSL_ERROR_WANT_WRITE ))
-                    {
-                        // create socket list no matter SSL_accept is complete or not                      
-                        socket.fd = infd;
-                        socket.writable = true;
-                        socket.s_addr = ((sockaddr_in*)&in_addr)->sin_addr.s_addr;
-                        socket.ssl = ssl;
-                        sockets_.insert( std::pair<int, Socket>(infd, socket) );
-                        
-                        // if SSL_accept is complete, call the callback
-                        if ( ret == 1 && callback_ != NULL )
-                        {
-                            callback_->connect( infd );
-                        }
+                            
+                        break;
                     }
                     else
                     {
-                        LOG_W(tag_) << "SSL_accept failed, fd:" << infd << " err:" << SSL_get_error(ssl, ret);
-                        requestclosefd( infd );
-                        continue;
-                    }                    
+                        socket.fd = infd;
+                        socket.writable = true;
+                        socket.s_addr = ((sockaddr_in*)&in_addr)->sin_addr.s_addr;
+                        sockets_.insert( std::pair<int, Socket>(infd, socket) );
+                        
+                        // if SSL_accept is complete, call the callback
+                        if ( callback_ != NULL )
+                        {
+                            callback_->connect( infd );
+                        }
+                        
+                        LOG_D(tag_) << "socket accepted " << infd;
+                    }
                 }                
             }
             else
@@ -464,91 +417,50 @@ void octillion::SslServer::core_task()
                     LOG_E(tag_) << "fatal error, cannot find the socket in list";
                     return;
                 }
-
-                SSL* ssl = it->second.ssl;
-                if ( ! SSL_is_init_finished(ssl) )
-                {
-                    // handshake should already be done during SSL_accept();
-                    // LOG_E(tag_) << "SSL_is_init_finished return false, close fd " << events[i].data.fd;
-                    // closesocket( events[i].data.fd );
-                    LOG_D(tag_) << "retry SSL_accept";
-                    ret = SSL_accept(ssl);
-                    
-                    if ( ret == 1 )
-                    {                    
-                        // callback, notify there is a new connection infd
-                        if ( callback_ != NULL )
-                        {
-                            callback_->connect( it->first );
-                        }
-                        
-                        // in ET mode, server should continue the SSL_Read()
-                    }
-                    else if ( 
-                       (SSL_get_error(ssl, ret) == SSL_ERROR_WANT_READ || 
-                        SSL_get_error(ssl, ret) == SSL_ERROR_WANT_WRITE ))
-                    {
-                        // SSL_accept will be done later;
-                        LOG_D(tag_) << "SSL_accept retry not complete, fd:" << it->first;
-                        continue;
-                    }
-                    else
-                    {
-                        LOG_W(tag_) << "SSL_accept failed, fd:" << it->first << " err:" << SSL_get_error(ssl, ret);
-                        closesocket( it->first );
-                        continue; 
-                    }                    
-                }
                                 
                 // the client socket is readable, read the entire data
                 while( true )
                 {
-                    // ET mode, SSL_read until no more data or error occurred              
-                    ret = SSL_read( ssl, recvbuf, sizeof recvbuf );
+                    // ET mode, read until no more data or error occurred              
+                    ret = read( events[i].data.fd, recvbuf, sizeof recvbuf );
                     
                     if ( ret > 0 )
                     {
-                        // we didn't set flag for partial read
+                        LOG_D(tag_) << "recv " << ret << " bytes";
                         if ( callback_ != NULL )
                         {
-                            LOG_D(tag_) << "SSL_read before callback, out_data_.size()=" << out_data_.size();
                             if ( callback_->recv( events[i].data.fd, (uint8_t*)recvbuf, (size_t)ret ) <= 0 )
                             {
                                 LOG_W(tag_) << "recv fd: " << events[i].data.fd << " failed, closed it.";
                                 closesocket( events[i].data.fd );
                                 break;
                             }
-                            else
-                            {
-                                LOG_D(tag_) << "SSL_read after callback, out_data_.size()=" << out_data_.size();
-                            }
-                        }                    
+                        }
+                    }
+                    else if ( ret == 0 )
+                    {
+                        // client disconnect
+                        LOG_D(tag_) << "read, detect fd " << events[i].data.fd << " disconnected.";
+                        closesocket( events[i].data.fd );
+                        break;
+                    }
+                    else if ( errno == EAGAIN || errno == EWOULDBLOCK )
+                    {
+                        // no more data
+                        LOG_D(tag_) << "read, no more data";   
+                        break;
                     }
                     else
                     {
-                        int sslerror = SSL_get_error( ssl, ret );
-                        
-                        switch( sslerror )
-                        {
-                        case SSL_ERROR_WANT_READ:
-                        case SSL_ERROR_WANT_WRITE:
-                            LOG_D(tag_) << "SSL_read complete";
-                            break;
-                        case SSL_ERROR_SYSCALL:
-                            LOG_D(tag_) << "SSL_read return SSL_ERROR_SYSCALL might because client disconnect";
-                            closesocket( events[i].data.fd );
-                            break;
-                        default:
-                            LOG_D(tag_) << "SSL_read return " << get_openssl_err(sslerror);
-                            closesocket( events[i].data.fd );
-                            break;
-                        }
-                        
+                        LOG_W(tag_) << "read failed, fd " << events[i].data.fd 
+                           << " errno: " << get_errno_string()
+                           << " message: " << strerror( errno );                        
+                        closesocket( events[i].data.fd );
                         break;
                     }
                 } // end of SSL_read while-loop
 
-                LOG_D( tag_ ) << "end of SSL_read, out_data_.size():" << out_data_.size();
+                LOG_D( tag_ ) << "end of SSL_read";
                 
             } // end of event if-else block
         } // end of events for-loop
@@ -561,24 +473,15 @@ void octillion::SslServer::core_task()
     }
     
     server_fd_ = -1;
-    is_running_ = false;
-    
-    for (const auto& data : sockets_ ) 
-    {
-        LOG_D(tag_) << "core_task, recycle ssl_, fd:" << data.first;
-        SSL_free( data.second.ssl );
-    }
-    
-    SSL_free( server_ssl_ );
-    
-    SSL_CTX_free( ctx ); 
+    is_running_ = false;  
 
     LOG_D(tag_) << "core_task leave";
 }
 
-std::error_code octillion::SslServer::init_server_socket()
+std::error_code octillion::Server::init_server_socket()
 {
     int err;
+    int reuse = 0;
     
     struct addrinfo hints;
     struct addrinfo *servinfo;
@@ -608,7 +511,7 @@ std::error_code octillion::SslServer::init_server_socket()
         server_fd_ = socket( rp->ai_family, rp->ai_socktype, rp->ai_protocol );
         
         if ( server_fd_ == -1 )
-        {
+        { 
             continue;
         }
         
@@ -621,6 +524,8 @@ std::error_code octillion::SslServer::init_server_socket()
         
         close( server_fd_ );
     }
+    
+    LOG_D(tag_) << "create server socket " << server_fd_;
     
     if ( rp == NULL )
     {
@@ -639,7 +544,7 @@ std::error_code octillion::SslServer::init_server_socket()
     return OcError::E_SUCCESS;
 }
 
-std::error_code octillion::SslServer::set_nonblocking( int fd )
+std::error_code octillion::Server::set_nonblocking( int fd )
 {
     int flags, err;
     
@@ -665,31 +570,30 @@ std::error_code octillion::SslServer::set_nonblocking( int fd )
     return OcError::E_SUCCESS;
 }
 
-std::error_code octillion::SslServer::senddata( int fd, const void *buf, size_t len, bool disconnect )
+std::error_code octillion::Server::senddata( int fd, const void *buf, size_t len, bool closefd )
 {
-    LOG_D( tag_ ) << "senddata, add fd:" << fd << " datasize:" << len 
-        << " disconnect:" << disconnect << " into out_data_";
+    LOG_D( tag_ ) << "senddata_ts, add fd:" << fd << " datasize:" << len << " into out_data_";
     
     // copy into SSL_write waiting list
     out_data_lock_.lock();   
     
     DataBuffer buffer;
     buffer.fd = fd;
-    buffer.disconnect = disconnect;
+    buffer.closefd = closefd;
     
     // buffer.datalen = len;
     // buffer.data = new uint8_t[len];
-    // ::memcpy((void*) buffer.data, (void*) buf, len );   
+    // ::memcpy((void*) buffer.data, (void*) buf, len );
     buffer.data = std::make_shared<std::vector<uint8_t>>( len, (uint8_t)0 );
     ::memcpy((void*) buffer.data->data(), (void*) buf, len );
-
+    
     out_data_.push_back( buffer );    
     out_data_lock_.unlock();
     
     return OcError::E_SUCCESS;
 }
 
-std::error_code octillion::SslServer::senddata( int fd, std::shared_ptr<std::vector<uint8_t>> data, bool disconnect )
+std::error_code octillion::Server::senddata( int fd, std::shared_ptr<std::vector<uint8_t>> data, bool closefd )
 {
     LOG_D( tag_ ) << "senddata_ts, add fd:" << fd << " datasize:" << data.get()->size() << " into out_data_";
     
@@ -698,7 +602,7 @@ std::error_code octillion::SslServer::senddata( int fd, std::shared_ptr<std::vec
     
     DataBuffer buffer;
     buffer.fd = fd;
-    buffer.disconnect = disconnect;
+    buffer.closefd = closefd;
     
     buffer.data = std::make_shared<std::vector<uint8_t>>( *data );
     
@@ -708,7 +612,7 @@ std::error_code octillion::SslServer::senddata( int fd, std::shared_ptr<std::vec
     return OcError::E_SUCCESS;
 }
 
-void octillion::SslServer::closesocket( int fd )
+void octillion::Server::closesocket( int fd )
 {
     LOG_D(tag_) << "closesocket() enter, fd: " << fd;
     close( fd );
@@ -717,7 +621,6 @@ void octillion::SslServer::closesocket( int fd )
     std::map<int, Socket>::iterator iter = sockets_.find( fd );
     if ( iter != sockets_.end() )
     {
-        SSL_free( iter->second.ssl );
         sockets_.erase( iter );
     }
     else
@@ -725,7 +628,7 @@ void octillion::SslServer::closesocket( int fd )
         LOG_E(tag_) << "closesocket fd:" << fd << " does not exist in sockets_";
     }
     
-    // clean up waiting list (SSL_write)
+    // clean up waiting list for ::write
     out_data_lock_.lock();
     for (auto it = out_data_.begin(); it != out_data_.end(); ) 
     {
@@ -748,33 +651,7 @@ void octillion::SslServer::closesocket( int fd )
     }
 }
 
-std::string octillion::SslServer::get_openssl_err( int sslerr )
-{
-    switch( sslerr )
-    {
-    case SSL_ERROR_WANT_READ:
-        return "SSL_ERROR_WANT_READ";
-    case SSL_ERROR_WANT_WRITE:
-        return "SSL_ERROR_WANT_WRITE";
-    case SSL_ERROR_WANT_CONNECT:
-        return "SSL_ERROR_WANT_CONNECT";
-    case SSL_ERROR_WANT_ACCEPT:
-        return "SSL_ERROR_WANT_ACCEPT";
-    case SSL_ERROR_WANT_X509_LOOKUP:
-        return "SSL_ERROR_WANT_X509_LOOKUP";
-    case SSL_ERROR_SYSCALL:
-        return "SSL_ERROR_SYSCALL";
-    case SSL_ERROR_SSL:
-        return "SSL_ERROR_SSL";    
-    case SSL_ERROR_ZERO_RETURN:
-        return "SSL_ERROR_ZERO_RETURN";
-    default:
-        return "Unknown SSL error";
-        break;
-    }
-}
-
-std::string octillion::SslServer::get_epoll_event( uint32_t events )
+std::string octillion::Server::get_epoll_event( uint32_t events )
 {
     std::string str;
     if ( events & EPOLLERR )
@@ -796,7 +673,20 @@ std::string octillion::SslServer::get_epoll_event( uint32_t events )
     return str;
 }
 
-std::error_code octillion::SslServer::requestclosefd(int fd)
+std::string octillion::Server::get_errno_string()
+{
+    if ( errno == EAGAIN ) return "EAGAIN";
+    if ( errno == EWOULDBLOCK ) return "EWOULDBLOCK"; 
+    if ( errno == EBADF ) return "EBADF"; 
+    if ( errno == EFAULT ) return "EFAULT"; 
+    if ( errno == EINTR ) return "EINTR"; 
+    if ( errno == EINVAL ) return "EINVAL"; 
+    if ( errno == EIO ) return "EIO"; 
+    if ( errno == EISDIR ) return "EISDIR"; 
+    return "OTHERS";
+}
+
+std::error_code octillion::Server::requestclosefd(int fd)
 {
     LOG_D(tag_) << "requestclosefd fd:" << fd;
 
@@ -807,7 +697,7 @@ std::error_code octillion::SslServer::requestclosefd(int fd)
     return OcError::E_SUCCESS;
 }
 
-std::string octillion::SslServer::getip( int fd )
+std::string octillion::Server::getip( int fd )
 {
     char str[INET_ADDRSTRLEN];
     std::map<int, Socket>::iterator it = sockets_.find( fd );

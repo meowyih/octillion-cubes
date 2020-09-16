@@ -15,9 +15,15 @@ OBJS = $(addprefix $(OBJDIR)/, \
        main.o \
        ocerror.o \
        sslserver.o \
+       sslclient.o \
+       server.o \
+       dataqueue.o \
+       memleak.o \
 	   t001.o \
        t002.o \
        t003.o \
+       t004.o \
+       t005.o \
        )
 
 TARGET = exe

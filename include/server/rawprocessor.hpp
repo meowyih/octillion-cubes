@@ -121,13 +121,13 @@ public:
     static void* operator new[](size_t size)
     {
         void* memory = MALLOC(size);
-
+        
         MemleakRecorder::instance().alloc(__FILE__, __LINE__, memory);
 
         return memory;
     }
 
-        static void operator delete(void* p)
+    static void operator delete(void* p)
     {
         MemleakRecorder::instance().release(p);
         FREE(p);

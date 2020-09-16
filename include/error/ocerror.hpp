@@ -22,6 +22,9 @@ enum class OcError
     E_SYS_SEND_WRONG_THREAD = 100,
     E_SYS_SEND = 110,
     E_SYS_OPENSSL = 120,
+    E_SYS_CONNECT = 130,
+    E_SYS_STOP = 140,
+    E_SYS_TIMEOUT = 150,
 
     E_DB_NO_RECORD = 200,
     E_DB_DUPLICATE_USERNAME = 201,

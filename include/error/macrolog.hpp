@@ -24,7 +24,7 @@
 // OCTILLION_MACRO_LOG_LEVEL 3 - enable error, warning, info
 // OCTILLION_MACRO_LOG_LEVEL 4 - enable error, warning, info, debug
 #ifndef OCTILLION_MACRO_LOG_LEVEL
-#define OCTILLION_MACRO_LOG_LEVEL 1
+#define OCTILLION_MACRO_LOG_LEVEL 4
 #endif
 
 #define LOG_E(x)  \

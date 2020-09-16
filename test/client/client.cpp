@@ -5,9 +5,6 @@
 #include <map>
 #include <mutex>
 
-#ifdef WIN32
-// Currently no Win32 Implementation for coreserver
-#else
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
@@ -18,11 +15,24 @@
 #include <errno.h>
 #include <sys/epoll.h>
 
-#include <openssl/ssl.h>
-#include <openssl/err.h>
-#endif
+#include <iostream>
+#include <string>
+#include <system_error>
+#include <thread>
+#include <chrono>
 
-int main()
+#include <signal.h>
+#include "error/ocerror.hpp"
+#include "server/sslclient.hpp"
+#include "error/macrolog.hpp"
+
+int main() 
+{
+    octillion::SslClient::get_instance().write( "127.0.0.1", "8888", (uint8_t*)"abc", 3 );
+    return 0;
+}
+
+int main_()
 {
     int     err;
     int     sock;

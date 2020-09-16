@@ -168,6 +168,8 @@ private:
     int line_;
 };
 
+#ifdef MEMORY_DEBUG
+
 void* operator new(size_t size);
 
 void* operator new[](size_t size);
@@ -176,42 +178,6 @@ void operator delete(void* p);
 
 void operator delete[](void* p);
 
-#if 0 // change this flag to override the new/delete and make it work
-void* operator new(size_t size, const char* file, int line)
-{
-    std::cout << "new " << size << " bytes" << std::endl;
-    void* memory = MALLOC(size);
-
-    MemleakRecorder::instance().alloc(file, line, memory);
-
-    return memory;
-}
-
-void* operator new[](size_t size, const char* file, int line)
-{
-    std::cout << "new[] " << size << " bytes" << std::endl;
-    void* memory = MALLOC(size);
-
-    MemleakRecorder::instance().alloc(file, line, memory);
-
-    return memory;
-}
-
-void operator delete(void* p)
-{
-    std::cout << "delete " << std::endl;
-    MemleakRecorder::instance().release(p);
-    FREE(p);
-}
-
-void operator delete[](void* p)
-{
-    MemleakRecorder::instance().release(p);
-    FREE(p);
-}
-
-// overwrite 'placement new'
-#define new new(__FILE__, __LINE__)
-#endif
+#endif // MEMORY_DEBUG
 
 #endif

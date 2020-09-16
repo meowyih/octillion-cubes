@@ -1,21 +1,11 @@
 
 CPP = g++
-CPPFLAGS = -O3 -ansi -std=c++11 -pthread -I../../include -Iinclude -L/usr/local/lib -lssl -lcrypto
-VPATH = ../../include \
-        ../../src/error \
-        ../../src/server \
-        ../../src/world \
-        ../../src/database \
-        ../../src/memory \
-		include \
-		src
+CPPFLAGS = -O3 -ansi -std=c++11 -pthread -L/usr/local/lib -lssl -lcrypto
+VPATH =
 
 OBJDIR = obj
 OBJS = $(addprefix $(OBJDIR)/, \
-       client.o \
-       ocerror.o \
-       sslclient.o \
-       memleak.o \
+       main.o \
        )
 
 TARGET = exe
