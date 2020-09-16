@@ -35,11 +35,6 @@ octillion::Server::~Server()
     core_thread_.reset();
     
     // clean up SSL_write retry waiting list
-    // for (auto it = out_data_.begin(); it != out_data_.end(); ++it ) 
-    // {
-    //     LOG_W( tag_ ) << "~Server, remove waiting list fd:" << (*it).fd;
-    //     delete [] (*it).data;
-    // }
     out_data_.clear();
     
     LOG_D(tag_) << "~Server()";
@@ -149,7 +144,6 @@ void octillion::Server::core_task()
 {
     int epollret, ret;
     struct epoll_event event;    
-    // struct epoll_event* events;
     struct Socket socket;
     
     char recvbuf[512];
@@ -212,7 +206,6 @@ void octillion::Server::core_task()
             if ( ret == (*it).data->size() )
             {
                 LOG_D( tag_ ) << "core_task, write done, fd:" << (*it).fd;
-                // delete [] (*it).data;
                 (*it).data.reset();                
                 if ( (*it).closefd )
                 {
@@ -232,20 +225,10 @@ void octillion::Server::core_task()
                 
                 if ( ret > 0 )
                 {
-                    // copy the remaining partial data
-                    // size_t par_data_size = (*it).datalen - ret;                    
-                    // uint8_t* par_data = new uint8_t[par_data_size];
-                    // ::memcpy((void*)par_data, (*it).data + ret, par_data_size );
-                    // delete [] (*it).data;
-                    // (*it).data = par_data;
-                    // (*it).datalen = par_data_size;
-                    
-                    std::shared_ptr<std::vector<uint8_t>> pdata
-                        = std::make_shared<std::vector<uint8_t>>(
-                        (*it).data->begin() + ret, (*it).data->end() );
-                    
+                    // copy the remaining partial data                    
                     (*it).data.reset();
-                    (*it).data = pdata;
+                    (*it).data = std::make_shared<std::vector<uint8_t>>(
+                        (*it).data->begin() + ret, (*it).data->end() );
                 }
             }
             else 
@@ -254,7 +237,6 @@ void octillion::Server::core_task()
                 LOG_W( tag_ ) << "core_task, senddata failed, fd:" << (*it).fd << 
                     " errno:" << errno << " " << strerror( errno );
                 requestclosefd( (*it).fd );
-                // delete [] (*it).data;
                 (*it).data.reset();
                 it = out_data_.erase(it);
             }
@@ -581,9 +563,6 @@ std::error_code octillion::Server::senddata( int fd, const void *buf, size_t len
     buffer.fd = fd;
     buffer.closefd = closefd;
     
-    // buffer.datalen = len;
-    // buffer.data = new uint8_t[len];
-    // ::memcpy((void*) buffer.data, (void*) buf, len );
     buffer.data = std::make_shared<std::vector<uint8_t>>( len, (uint8_t)0 );
     ::memcpy((void*) buffer.data->data(), (void*) buf, len );
     
@@ -593,9 +572,9 @@ std::error_code octillion::Server::senddata( int fd, const void *buf, size_t len
     return OcError::E_SUCCESS;
 }
 
-std::error_code octillion::Server::senddata( int fd, std::shared_ptr<std::vector<uint8_t>> data, bool closefd )
+std::error_code octillion::Server::senddata( int fd, std::vector<uint8_t>& data, bool closefd )
 {
-    LOG_D( tag_ ) << "senddata_ts, add fd:" << fd << " datasize:" << data.get()->size() << " into out_data_";
+    LOG_D( tag_ ) << "senddata_ts, add fd:" << fd << " datasize:" << data.size() << " into out_data_";
     
     // copy into SSL_write waiting list
     out_data_lock_.lock();   
@@ -604,7 +583,7 @@ std::error_code octillion::Server::senddata( int fd, std::shared_ptr<std::vector
     buffer.fd = fd;
     buffer.closefd = closefd;
     
-    buffer.data = std::make_shared<std::vector<uint8_t>>( *data );
+    buffer.data = std::make_shared<std::vector<uint8_t>>( data );
     
     out_data_.push_back( buffer );    
     out_data_lock_.unlock();
@@ -634,7 +613,6 @@ void octillion::Server::closesocket( int fd )
     {
         if ((*it).fd == fd) 
         {
-            // delete [] (*it).data;
             (*it).data.reset();
             it = out_data_.erase(it);
         } 

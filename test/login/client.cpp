@@ -56,19 +56,20 @@ class ClientCallback : public octillion::SslClientCallback
                 return 0;
             }
             
-            char* strbuf = new char[ datasize - 3 ];
-            strbuf[ datasize - 3 ] = 0;            
-            ::memcpy((void*)strbuf, data + 4, datasize - 4 );
-            std::string raw( strbuf );
+            std::vector<uint8_t> buffer( datasize - 4, 0 );
             
-            octillion::JsonW jret( strbuf, datasize - 4 );
+            ::memcpy((void*)buffer.data(), data + 4, datasize - 4 );
+            std::string raw( (const char*)buffer.data(), datasize - 4 );
+            
+            octillion::JsonW jret( (const char*)buffer.data(), datasize - 4 );
             octillion::JsonW* jtoken = jret.get( u8"token" );
             if ( jtoken != NULL )
             {
                 octillion::JsonW jobj;
                 std::error_code err;
                 size_t rawdata_size;
-                uint8_t* packet;
+                // uint8_t* packet;
+                std::vector<uint8_t> packet;
                 uint32_t nsize;
                 
                 std::string ip, port, token;
@@ -85,9 +86,13 @@ class ClientCallback : public octillion::SslClientCallback
                 rawdata_size = strlen( jobj.text().c_str() );
                 std::cout << "rawdata_size: " << rawdata_size << std::endl;
                 nsize = htonl( rawdata_size );    
-                packet = new uint8_t[rawdata_size + sizeof(uint32_t)];
-                ::memcpy( packet, &nsize, sizeof(uint32_t) );
-                ::memcpy( packet + sizeof(uint32_t), jobj.text().c_str(), rawdata_size );
+                // packet = new uint8_t[rawdata_size + sizeof(uint32_t)];
+                // ::memcpy( packet, &nsize, sizeof(uint32_t) );
+                // ::memcpy( packet + sizeof(uint32_t), jobj.text().c_str(), rawdata_size );
+                
+                packet.resize( rawdata_size + sizeof(uint32_t) );
+                ::memcpy( packet.data(), &nsize, sizeof(uint32_t) );
+                ::memcpy( packet.data() + sizeof(uint32_t), jobj.text().c_str(), rawdata_size );
                 
                 // send data to game server via socket (non-ssl)
                 int sockfd, n;
@@ -102,7 +107,7 @@ class ClientCallback : public octillion::SslClientCallback
                 addr.sin_port = htons( std::stoi( port ));
                 addr.sin_addr.s_addr = *(long*)(host->h_addr);
                 connect(sockfd, (struct sockaddr*)&addr, sizeof(addr));
-                n = ::write(sockfd, packet, rawdata_size + sizeof(uint32_t));
+                n = ::write(sockfd, packet.data(), packet.size());
                 
                 uint8_t recvdata[512];
                 ::memset( recvdata, 0 , 512 );
@@ -112,11 +117,9 @@ class ClientCallback : public octillion::SslClientCallback
             }
             else
             {
-                std::cout << "id:" << id << " recv size:" << raw << " data:" << strbuf << std::endl;
+                std::cout << "id:" << id << " recv size:" << raw << " data:" << raw << std::endl;
             }
-            
-            delete [] strbuf;
-            
+                        
             flag = 1;
             
             return 0; 
@@ -125,11 +128,14 @@ class ClientCallback : public octillion::SslClientCallback
 
 int main()
 {
-    ClientCallback *callback = new ClientCallback();
-    octillion::SslClient::get_instance().set_callback( callback );   
+    ClientCallback callback;
+    octillion::SslClient::get_instance().set_callback( &callback );   
     
     while ( true )
     {
+        // command menu
+        // (1) create new account
+        // (2) login
         int choose;
         std::string str;
         std::cout << "(1) new" << std::endl;
@@ -137,11 +143,12 @@ int main()
         std::cout << " >>> ";
         std::cin >> choose;
         
+        // create new account
         if ( choose == 1 )
         {
             std::error_code err;
             size_t rawdata_size;
-            uint8_t* packet;
+            std::vector<uint8_t> packet;
             uint32_t nsize;
     
             octillion::JsonW jobj;
@@ -162,23 +169,22 @@ int main()
             
             rawdata_size = strlen( jobj.text().c_str() );   
             nsize = htonl( rawdata_size );    
-            packet = new uint8_t[rawdata_size + sizeof(uint32_t)];
-            ::memcpy( packet, &nsize, sizeof(uint32_t) );
-            ::memcpy( packet + sizeof(uint32_t), jobj.text().c_str(), rawdata_size );
+            packet.resize( rawdata_size + sizeof(uint32_t) );
+            ::memcpy( packet.data(), &nsize, sizeof(uint32_t) );
+            ::memcpy( packet.data() + sizeof(uint32_t), jobj.text().c_str(), rawdata_size );
             
             flag = 0;
             
+            // send id password to login ssl server
             octillion::SslClient::get_instance().write( 
-                10, "127.0.0.1", "8888", packet, 
-                rawdata_size + sizeof(uint32_t) );
-            
-            delete [] packet;            
+                10, "127.0.0.1", "8888", packet.data(), 
+                rawdata_size + sizeof(uint32_t) );           
         }
         else if ( choose == 2 )
         {
             std::error_code err;
             size_t rawdata_size;
-            uint8_t* packet;
+            std::vector<uint8_t> packet;
             uint32_t nsize;
     
             octillion::JsonW jobj;
@@ -200,26 +206,21 @@ int main()
             
             rawdata_size = strlen( jobj.text().c_str() );   
             nsize = htonl( rawdata_size );    
-            packet = new uint8_t[rawdata_size + sizeof(uint32_t)];
-            ::memcpy( packet, &nsize, sizeof(uint32_t) );
-            ::memcpy( packet + sizeof(uint32_t), jobj.text().c_str(), rawdata_size );
+            packet.resize( rawdata_size + sizeof(uint32_t) );
+            ::memcpy( packet.data(), &nsize, sizeof(uint32_t) );
+            ::memcpy( packet.data() + sizeof(uint32_t), jobj.text().c_str(), rawdata_size );
             
             flag = 0;
             
             octillion::SslClient::get_instance().write( 
-                10, "127.0.0.1", "8888", packet, 
-                rawdata_size + sizeof(uint32_t) ); 
-
-            delete [] packet;                
-    
+                10, "127.0.0.1", "8888", packet.data(), 
+                rawdata_size + sizeof(uint32_t) );    
         }
         else
         {
             return 0;
         }
     }        
-    
-    delete callback;
-    
+        
     return 0;
 }

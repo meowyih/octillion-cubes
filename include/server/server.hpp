@@ -57,7 +57,7 @@ class octillion::Server
 
         // send data vid a fd. this function is thread safe
         std::error_code senddata( int fd, const void *buf, size_t len, bool closefd = false );
-        std::error_code senddata( int fd, std::shared_ptr<std::vector<uint8_t>> data, bool closefd = false );
+        std::error_code senddata( int fd, std::vector<uint8_t>& data, bool closefd = false );
 
         // add fd into close queue and will be closed later in core_task thread
         std::error_code requestclosefd(int fd);

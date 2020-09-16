@@ -61,7 +61,7 @@ class octillion::SslServer
         // send data vid a fd. this function is thread safe,
         // if disconnect is true, server will close the connection after data sent
         std::error_code senddata( int fd, const void *buf, size_t len, bool disconnect = false );
-        std::error_code senddata( int fd, std::shared_ptr<std::vector<uint8_t>> data, bool disconnect = false );
+        std::error_code senddata( int fd, const std::vector<uint8_t>& data, bool disconnect = false );
 
         // add fd into close queue and will be closed later in core_task thread
         std::error_code requestclosefd(int fd);
@@ -125,8 +125,6 @@ class octillion::SslServer
         struct DataBuffer
         {
             int fd;
-            // uint8_t* data;
-            // size_t datalen;
             std::shared_ptr<std::vector<uint8_t>> data;
             bool disconnect;
         };

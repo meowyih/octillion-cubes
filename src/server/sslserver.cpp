@@ -676,10 +676,7 @@ std::error_code octillion::SslServer::senddata( int fd, const void *buf, size_t 
     DataBuffer buffer;
     buffer.fd = fd;
     buffer.disconnect = disconnect;
-    
-    // buffer.datalen = len;
-    // buffer.data = new uint8_t[len];
-    // ::memcpy((void*) buffer.data, (void*) buf, len );   
+  
     buffer.data = std::make_shared<std::vector<uint8_t>>( len, (uint8_t)0 );
     ::memcpy((void*) buffer.data->data(), (void*) buf, len );
 
@@ -689,9 +686,9 @@ std::error_code octillion::SslServer::senddata( int fd, const void *buf, size_t 
     return OcError::E_SUCCESS;
 }
 
-std::error_code octillion::SslServer::senddata( int fd, std::shared_ptr<std::vector<uint8_t>> data, bool disconnect )
+std::error_code octillion::SslServer::senddata( int fd, const std::vector<uint8_t>& data, bool disconnect )
 {
-    LOG_D( tag_ ) << "senddata_ts, add fd:" << fd << " datasize:" << data.get()->size() << " into out_data_";
+    LOG_D( tag_ ) << "senddata_ts, add fd:" << fd << " datasize:" << data.size() << " into out_data_";
     
     // copy into SSL_write waiting list
     out_data_lock_.lock();   
@@ -700,7 +697,7 @@ std::error_code octillion::SslServer::senddata( int fd, std::shared_ptr<std::vec
     buffer.fd = fd;
     buffer.disconnect = disconnect;
     
-    buffer.data = std::make_shared<std::vector<uint8_t>>( *data );
+    buffer.data = std::make_shared<std::vector<uint8_t>>( data );
     
     out_data_.push_back( buffer );    
     out_data_lock_.unlock();

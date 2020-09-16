@@ -33,16 +33,17 @@ int octillion::LoginServer::recv( int fd, uint8_t* data, size_t datasize)
     // handle ready rawdata
     if ( rawdata_.size() > 0 )
     {
-        uint8_t* rawdata;
-        int ret, rawfd, rawsize;
+        std::vector<uint8_t> rawdata;
+        int ret, rawfd;
         
-        rawsize = rawdata_.peek();
-        rawdata = new uint8_t[rawsize];
-        rawdata_.pop( rawfd, rawdata, rawsize );
+        rawdata.resize( rawdata_.peek() );
+        if ( OcError::E_SUCCESS != rawdata_.pop( rawfd, rawdata.data(), rawdata.size() ))
+        {
+            LOG_D(tag_) << "Error: Fatal Error during rawdata_.pop";
+            return -1;
+        }
         
-        ret = dispatch( rawfd, rawdata, rawsize );
-        
-        delete [] rawdata;
+        ret = dispatch( rawfd, rawdata.data(), rawdata.size() );
         
         rawdata_.remove( rawfd );
         
@@ -185,6 +186,8 @@ std::error_code octillion::LoginServer::cmd_login( int fd, std::string username,
     else
     {
         LOG_D(tag_) << "cmd_login ret E_DB_BAD_RECORD";
+        jret[u8"result"] = u8"E_DB_BAD_RECORD";
+        sendpacket( fd, jret.text() );
         return OcError::E_DB_BAD_RECORD;
     }
 }
@@ -212,7 +215,8 @@ std::error_code octillion::LoginServer::cmd_auth(
     it = tokens_.find( username );
     if ( it == tokens_.end() )
     {
-        jret[u8"result"] = u8"E_FATAL";
+        jret[u8"result"] = u8"E_DB_BAD_RECORD";
+        sendpacket( fd, jret.text() );
         return OcError::E_DB_BAD_RECORD;
     }
 
@@ -259,29 +263,26 @@ bool octillion::LoginServer::is_authserer( std::string ip )
 
 void octillion::LoginServer::sendpacket( int fd, std::string rawdata )
 {
-    size_t rawdata_size, packet_size;
-    uint8_t* packet;
+    size_t rawdata_size;
+    std::vector<uint8_t> packet;
     uint32_t nsize;
     
     LOG_D(tag_) << "sendpacket fd:" << fd << " data:" << rawdata;
     
     rawdata_size = strlen( rawdata.c_str() );
-    packet_size = rawdata_size + sizeof(uint32_t);
+    packet.resize( rawdata_size + sizeof(uint32_t));
     nsize = ntohl( rawdata_size );    
-    packet = new uint8_t[ packet_size ];
-    ::memcpy( packet, &nsize, sizeof(uint32_t) );
-    ::memcpy( packet + sizeof(uint32_t), rawdata.c_str(), rawdata_size );
+    ::memcpy( packet.data(), &nsize, sizeof(uint32_t) );
+    ::memcpy( packet.data() + sizeof(uint32_t), rawdata.c_str(), rawdata_size );
     
-    octillion::SslServer::get_instance().senddata( fd, packet, packet_size, true );
-    
-    delete [] packet;
+    octillion::SslServer::get_instance().senddata( fd, packet.data(), packet.size(), true );
     
     return;
 }
 
 std::string octillion::LoginServer::base64( uint8_t* data, size_t datasize )
 {
-    uint8_t* base64;
+    std::vector<uint8_t> base64;
     size_t bufsize, base64size;
     int padding;
     
@@ -302,7 +303,7 @@ std::string octillion::LoginServer::base64( uint8_t* data, size_t datasize )
 
     bufsize = datasize + padding;     
     base64size = bufsize * 4 / 3;
-    base64 = new uint8_t[base64size];
+    base64.resize( base64size );
     
     for ( int i = 0, j = 0; i < datasize; i = i + 3, j = j + 4 )
     {
@@ -333,9 +334,7 @@ std::string octillion::LoginServer::base64( uint8_t* data, size_t datasize )
         }
     }
  
-    std::string retstr( (const char*)base64, base64size );
-    
-    delete [] base64;
+    std::string retstr( (const char*)base64.data(), base64size );
     
     return retstr;
 }

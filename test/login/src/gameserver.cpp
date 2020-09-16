@@ -38,16 +38,17 @@ int octillion::GameServer::recv( int fd, uint8_t* data, size_t datasize)
     // handle ready rawdata
     if ( rawdata_.size() > 0 )
     {
-        uint8_t* rawdata;
+        std::vector<uint8_t> rawdata;
         int ret, rawfd, rawsize;
         
-        rawsize = rawdata_.peek();
-        rawdata = new uint8_t[rawsize];
-        rawdata_.pop( rawfd, rawdata, rawsize );
+        rawdata.resize( rawdata_.peek() );
+        if ( OcError::E_SUCCESS != rawdata_.pop( rawfd, rawdata.data(), rawdata.size() ))
+        {
+            LOG_D(tag_) << "Error: Fatal Error during rawdata_.pop";
+            return -1;
+        }
         
-        ret = dispatch( rawfd, rawdata, rawsize );
-        
-        delete [] rawdata;
+        ret = dispatch( rawfd, rawdata.data(), rawdata.size() );
         
         rawdata_.remove( rawfd );
         
@@ -179,10 +180,6 @@ int octillion::GameServer::recv( int id, std::error_code error, uint8_t* data, s
         // zombie event from login server, ignore it
         return 0;
     }
-        
-    uint8_t *raw = new uint8_t[datasize];
-    ::memset( raw, 0, datasize );
-    ::memcpy( raw, data + 4, datasize - 4);
     
     JsonW jobj( (const char*) data +4, datasize - 4 );
     
@@ -220,31 +217,27 @@ int octillion::GameServer::recv( int id, std::error_code error, uint8_t* data, s
 void octillion::GameServer::sendpacket( int fd, std::string rawdata, bool closefd, bool auth )
 {
     size_t rawdata_size, packet_size;
-    uint8_t* packet;
+    std::vector<uint8_t> packet;
     uint32_t nsize;
 
     LOG_D(tag_) << "sendpacket fd:" << fd << " data:" << rawdata;
     
     rawdata_size = strlen( rawdata.c_str() );
-    packet_size = rawdata_size + sizeof(uint32_t);
+    packet.resize( rawdata_size + sizeof(uint32_t));
     nsize = ntohl( rawdata_size );    
-    packet = new uint8_t[ packet_size ];
-    ::memcpy( packet, &nsize, sizeof(uint32_t) );
-    ::memcpy( packet + sizeof(uint32_t), rawdata.c_str(), rawdata_size );
+    ::memcpy( packet.data(), &nsize, sizeof(uint32_t) );
+    ::memcpy( packet.data() + sizeof(uint32_t), rawdata.c_str(), rawdata_size );
     
     if ( auth )
     {
         // send auth request to login server 
-        SslClient::get_instance().write( fd, loginserver_addr, loginserver_port, packet, packet_size );
+        SslClient::get_instance().write( fd, loginserver_addr, loginserver_port, packet.data(), packet.size() );
     }
     else
     {
         // send to client
-        octillion::Server::get_instance().senddata( fd, packet, packet_size, closefd );
+        octillion::Server::get_instance().senddata( fd, packet.data(), packet.size(), closefd );
     }
     
-    
-    delete [] packet;
-
     return;
 }
