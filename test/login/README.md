@@ -1,7 +1,7 @@
 # Login Server for Massive User
 ## Sinlge login server with multiple game servers
 
-This project implements a real login server on Linux. It was written in C++17 without the 3rd library except openssl. I also have a blog post written in zh_TW: https://www.yhorng.com/blog/?p=266
+This project, actually sub-project, implements a real login server on Linux. It was written in C++17 without the 3rd library except openssl. I have another blog post written in zh_TW: https://www.yhorng.com/blog/?p=266
 
 # Secure Users' Password in Storage
 ## Encrypt / Hash Password
@@ -34,14 +34,14 @@ Hash/Encrpty password is very computing power consuming. Because of that, we rea
 4. Game server sends end-user's name and token back to login server.
 5. If the token is correct and has not been expired (usually 30 seconds at most), besides, the end-user's ip address is also matched, login server informs game server this end-user is a good one.
 
-Every connection to the login server has to be protected, i.e. must under SSL. But the data commumication between game server and end-user could just normal socket.
+Every connection to the login server has to be protected, i.e. must under SSL. But the data commumication between game server and end-user could just use normal socket.
 
 # Dependency
 
 ## Login Server
 ```
-macrolog -+
-ocerror  -+- sslserver - loginserver - lserver
+macrolog -+- sslserver - loginserver - lserver
+ocerror  -+              |
 jsonw    ----------------+
 event     ---------------+
 dataqueue ---------------+
@@ -49,8 +49,8 @@ blowfish  ---------------+
 ```
 ## Game Server
 ```
-macrolog -+
-ocerror  -+- server - gameserver - gserver
+macrolog -+- server - gameserver - gserver
+ocerror  -+           |
 sslclient ------------+
 jsonw     ------------+
 event     ------------+
