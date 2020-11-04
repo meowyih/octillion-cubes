@@ -11,7 +11,7 @@
 #include "error/ocerror.hpp"
 #include "server/server.hpp"
 
-#include "gameserver.hpp"
+#include "world/gameserver.hpp"
 
 volatile sig_atomic_t flag = 0;
 

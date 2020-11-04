@@ -31,6 +31,8 @@ std::string g_ip;
 std::string g_port;
 std::string g_token;
 
+void gameloop();
+
 void my_function(int sig)
 {
     std::cout << "stopping the client..." << std::endl;
@@ -216,6 +218,12 @@ int main()
         std::cout << "(1) new id/token" << std::endl;
         std::cout << "(2) login for token" << std::endl;
         std::cout << "(3) login game server" << std::endl;
+        std::cout << "(4) X INC" << std::endl;
+        std::cout << "(5) Y INC" << std::endl;
+        std::cout << "(6) Z INC" << std::endl;
+        std::cout << "(7) X DEC" << std::endl;
+        std::cout << "(8) Y DEC" << std::endl;
+        std::cout << "(9) Z DEC" << std::endl;
         std::cout << " >>> ";
         std::cin >> choose;
         
@@ -276,7 +284,7 @@ int main()
                 10, "127.0.0.1", "8888", packet.data(), 
                 rawdata_size + sizeof(uint32_t) );      
         }
-        else if ( choose == 3 )
+        else
         {
             int event_type;
                             
@@ -309,10 +317,41 @@ int main()
                 }
             }
             
+            switch( choose )
+            {
+            case 3:
+                event_type = octillion::Event::TYPE_PLAYER_VERIFY_TOKEN;
+                break;
+            case 4:
+                event_type = octillion::Event::TYPE_CMD_MOVE_X_INC;
+                break;
+            case 5:
+                event_type = octillion::Event::TYPE_CMD_MOVE_Y_INC;
+                break;
+            case 6:
+                event_type = octillion::Event::TYPE_CMD_MOVE_Z_INC;
+                break;
+            case 7:
+                event_type = octillion::Event::TYPE_CMD_MOVE_X_DEC;
+                break;
+            case 8:
+                event_type = octillion::Event::TYPE_CMD_MOVE_Y_DEC;
+                break;
+            case 9:
+                event_type = octillion::Event::TYPE_CMD_MOVE_Z_DEC;
+                break;                
+            default:
+                return 0;
+            }
+            
             // connect to game server
-            jobj[u8"cmd"] = octillion::Event::TYPE_PLAYER_VERIFY_TOKEN;
-            jobj[u8"user"] = g_username;
-            jobj[u8"token"] = g_token;
+            jobj[u8"cmd"] = event_type;
+            
+            if ( event_type == octillion::Event::TYPE_PLAYER_VERIFY_TOKEN )
+            {
+                jobj[u8"user"] = g_username;
+                jobj[u8"token"] = g_token;
+            }
 
             rawdata_size = strlen( jobj.text().c_str() );   
             nsize = htonl( rawdata_size );    
@@ -329,10 +368,6 @@ int main()
             n = ::read(sockfd, recvdata, 512 );
             std::cout << "read " << n << " bytes.\n";
             std::cout << ( recvdata + 4 ) << std::endl;
-        }
-        else
-        {
-            return 0;
         }
     }
         

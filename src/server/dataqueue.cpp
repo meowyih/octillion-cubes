@@ -1,14 +1,12 @@
 #include <queue>
 #include <netinet/in.h>
 #include <vector>
+#include <algorithm> // for copy() and assign() 
+#include <iterator> // for back_inserter 
 
 #include "error/ocerror.hpp"
 #include "error/macrolog.hpp"
 #include "server/dataqueue.hpp"
-
-#ifdef MEMORY_DEBUG
-#include "memory/memleak.hpp"
-#endif
 
 octillion::DataQueue::DataQueue()
 {   
@@ -54,6 +52,26 @@ std::error_code octillion::DataQueue::pop( int& fd, uint8_t* buf, size_t buflen 
     queue_.pop_front();
     
     return OcError::E_SUCCESS;
+}
+
+std::error_code octillion::DataQueue::pop( int& fd, std::vector<uint8_t>& buf )
+{
+    buf.clear();
+    
+    std::copy( queue_.front().dataptr.get()->begin(), 
+               queue_.front().dataptr.get()->end(), 
+               back_inserter( buf ) ); 
+    
+    fd = queue_.front().fd;
+    queue_.front().dataptr.reset();
+    queue_.pop_front();
+    
+    return OcError::E_SUCCESS;
+}
+
+std::error_code octillion::DataQueue::feed( int fd, std::vector<uint8_t>& buf )
+{
+    return feed( fd, buf.data(), buf.size() );
 }
 
 std::error_code octillion::DataQueue::feed( int fd, uint8_t* buf, size_t buflen )

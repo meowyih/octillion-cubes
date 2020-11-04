@@ -1,14 +1,12 @@
 
 CPP = g++
-CPPFLAGS = -O3 -ansi -std=c++17 -DTEST_LOGIN_MECHANISM_ONLY -pthread -I../../include -Iinclude -L/usr/local/lib -lssl -lcrypto
+CPPFLAGS = -O3 -ansi -std=c++17 -pthread -I../../include -Iinclude -L/usr/local/lib -lssl -lcrypto
 VPATH = ../../include \
         ../../src/error \
         ../../src/error \
         ../../src/server \
         ../../src/auth \
-        ../../src/world \
-		include \
-		src
+        ../../src/world
 
 OBJDIR = obj
 OBJS = $(addprefix $(OBJDIR)/, \
@@ -21,6 +19,9 @@ OBJS = $(addprefix $(OBJDIR)/, \
        server.o \
        blowfish.o \
        event.o \
+       cube.o \
+       worldmap.o \
+       world.o \
        )
 
 OBJLSERVER = $(addprefix $(OBJDIR)/, lserver.o)

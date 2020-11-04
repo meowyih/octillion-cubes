@@ -139,7 +139,7 @@ class octillion::Server
         std::list<int> badfds_;
     
     private:
-        const int kEpollTimeout = 5 * 1000;
+        const int kEpollTimeout = 1 * 1000;
         const int kEpollBufferSize = 64;        
 };
 

@@ -1,95 +1,138 @@
 
+#include "error/ocerror.hpp"
+#include "error/macrolog.hpp"
 #include "jsonw/jsonw.hpp"
 #include "world/event.hpp"
 
-octillion::JsonW* octillion::Event::json()
+octillion::Event::Event()
 {
-    JsonW* jobject = new JsonW();
+}
 
-    jobject->add("type", type_);
+octillion::Event::~Event()
+{
+}
 
-    switch (type_)
-    {        
-    case TYPE_PLAYER_LEAVE:
-		jobject->add("player", player_->json(Player::J_CUBE));
-        jobject->add("subcube", subcube_->json(0));
-        jobject->add("dir", direction_);
-		break;
-
-    case TYPE_PLAYER_LOGOUT:
-        jobject->add("player", player_->json(Player::J_CUBE));
-        break;
-
-    case TYPE_PLAYER_ARRIVE:
-		jobject->add("player", player_->json(0));
-        jobject->add("subcube", subcube_->json(0));
-        jobject->add("dir", direction_);
-		break;
-
-	case TYPE_PLAYER_ARRIVE_PRIVATE:
-		jobject->add("player", player_->json(Player::J_CUBE));
-		jobject->add("cube", eventcube_->json(Cube::J_MOB | Cube::J_PLAYER));
-		jobject->add("dir", direction_);
-		break;
-
-    case TYPE_PLAYER_LOGIN:    
-        jobject->add("player", player_->json(0));
-		jobject->add("cube", eventcube_->json(0));
-        break;
-
-	case TYPE_PLAYER_LOGIN_PRIVATE:
-		jobject->add("player", player_->json(Player::J_HP | Player::J_ATTR | Player::J_CUBE));
-		jobject->add("cube", eventcube_->json(Cube::J_MOB | Cube::J_PLAYER));
-		break;
-
-	case TYPE_PLAYER_DEAD:
-		jobject->add("player", player_->json(Player::J_CUBE));
-		jobject->add("mob", mob_->json(0));
-		break;
-
-	case TYPE_PLAYER_REBORN:
-		jobject->add("player", player_->json(0));
-		break;
-
-	case TYPE_PLAYER_REBORN_PRIVATE:
-		jobject->add("player", player_->json(Player::J_CUBE));
-		jobject->add("cube", eventcube_->json(Cube::J_MOB | Cube::J_PLAYER));
-		break;
-
-	case TYPE_PLAYER_ATTACK:
-		jobject->add("mob", mob_->json(Player::J_HP));
-		jobject->add("player", player_->json(0));
-		jobject->add("dmg", i32parm_);
-		break;
-
-	case TYPE_MOB_REBORN:
-		jobject->add("mob", mob_->json(Mob::J_HP | Mob::J_CUBE));
-		break;
-
-	case TYPE_MOB_ATTACK:
-		jobject->add("mob", mob_->json(0));
-		jobject->add("player", player_->json(Player::J_HP));
-		jobject->add("dmg", i32parm_);
-		break;
-
-	case TYPE_MOB_ARRIVE:
-		jobject->add("mob", mob_->json(Mob::J_HP | Mob::J_CUBE));
-		jobject->add("subcube", subcube_->json(0));
-		jobject->add("dir", Cube::dir(eventcube_, subcube_));
-		break;
-
-	case TYPE_MOB_LEAVE:
-		jobject->add("mob", mob_->json(Mob::J_CUBE));
-		jobject->add("subcube", subcube_->json(0));
-		jobject->add("dir", Cube::dir( eventcube_, subcube_ ));
-		break;
-
-	case TYPE_MOB_DEAD:
-		jobject->add("mob", mob_->json(0));
-		jobject->add("player", player_->json(Player::J_HP));
-		jobject->add("dmg", i32parm_);
-		break;
+// external event from network with fd and raw data
+octillion::Event::Event( int fd, std::vector<uint8_t>& data )
+{
+    JsonW json((const char*)data.data(), data.size());
+    
+    fd_ = fd;
+    valid_ = false;
+    
+    // valid command must be a valid json text
+    if ( json.valid() == false )
+    {
+        LOG_E(tag_) << "invalid json format";
+        return;
+    }
+    
+    // valid command must contains one and only one json object
+    if (json.type() != JsonW::OBJECT)
+    {
+        LOG_E(tag_) << "invalid json due to no object: " << json;
+        return;
+    }
+    
+    // valid command must contains "cmd" name-value pair as integer
+    std::shared_ptr<JsonW> jcmd = json.get(u8"cmd");
+    if (jcmd == nullptr || jcmd->type() != JsonW::INTEGER )
+    {
+        LOG_E(tag_) << "cons, json's object has no cmd: " << json;
+        return;
     }
 
-    return jobject;
+    type_ = (int)(jcmd->integer());
+    
+    if ( type_ == TYPE_PLAYER_CREATE || type_ == TYPE_PLAYER_LOGOUT )
+    {
+        valid_ = true;
+        return;
+    }
+    
+    if ( type_ == TYPE_PLAYER_LOGIN )
+    {
+        std::shared_ptr<JsonW> juser = json.get(u8"user");
+        std::shared_ptr<JsonW> jpass = json.get(u8"passwd");
+        
+        if ( juser == nullptr || juser->type() != JsonW::STRING || juser->str().length() == 0 )
+        {
+            LOG_E(tag_) << "invalid login json with no user " << json;
+            return;
+        }
+        
+        if ( jpass == nullptr || jpass->type() != JsonW::STRING || jpass->str().length() == 0 )
+        {
+            LOG_E(tag_) << "invalid login json with no passwd " << json;
+            return;
+        }
+        
+        strparms_.push_back( juser->str() );
+        strparms_.push_back( jpass->str() );
+        
+        valid_ = true;
+        
+        return;
+    }
+    
+    if ( type_ == TYPE_SERVER_VERIFY_TOKEN )
+    {
+        std::shared_ptr<JsonW> juser = json.get(u8"user");
+        std::shared_ptr<JsonW> jtoken = json.get(u8"token");
+        std::shared_ptr<JsonW> jip = json.get(u8"ip");
+        
+        if ( juser == nullptr || juser->type() != JsonW::STRING || juser->str().length() == 0 )
+        {
+            LOG_E(tag_) << "invalid login json with no user " << json;
+            return;
+        }
+        
+        if ( jtoken == nullptr || jtoken->type() != JsonW::STRING || jtoken->str().length() == 0 )
+        {
+            LOG_E(tag_) << "invalid login json with no token " << json;
+            return;
+        }
+        
+        if ( jip == nullptr || jip->type() != JsonW::STRING || jip->str().length() == 0 )
+        {
+            LOG_E(tag_) << "invalid login json with no ip " << json;
+            return;
+        }
+        
+        strparms_.push_back( juser->str() );
+        strparms_.push_back( jtoken->str() );
+        strparms_.push_back( jip->str() );
+        
+        valid_ = true;
+        
+        return;
+    }
+    
+    if ( type_ == TYPE_PLAYER_VERIFY_TOKEN )
+    {
+        std::shared_ptr<JsonW> juser = json.get(u8"user");
+        std::shared_ptr<JsonW> jtoken = json.get(u8"token");
+        
+        if ( juser == nullptr || juser->type() != JsonW::STRING || juser->str().length() == 0 )
+        {
+            LOG_E(tag_) << "invalid login json with no user " << json;
+            return;
+        }
+        
+        if ( jtoken == nullptr || jtoken->type() != JsonW::STRING || jtoken->str().length() == 0 )
+        {
+            LOG_E(tag_) << "invalid login json with no token " << json;
+            return;
+        }
+        
+        strparms_.push_back( juser->str() );
+        strparms_.push_back( jtoken->str() );
+        
+        valid_ = true;
+        
+        return;
+    }
+    
+    // other types
+    valid_ = true;
 }

@@ -2,13 +2,10 @@
 #define OCTILLION_COMMAND_HEADER
 
 #include <string>
+#include <vector>
 
 #include "world/cube.hpp"
-
-#ifdef MEMORY_DEBUG
-#include "memory/memleak.hpp"
-#endif
-
+#include "jsonw/jsonw.hpp"
 // [reserved pcid]
 // input - fd
 // output - available pcid
@@ -28,10 +25,6 @@
 // [login]
 // input - pcid, password
 // output - user information, cubes
-
-#include <vector>
-
-#include "jsonw/jsonw.hpp"
 
 namespace octillion
 {
@@ -75,7 +68,7 @@ public:
         
 public:  
     Command( int fd, int cmd );
-    Command( int fd, uint8_t* data, size_t datasize );
+    Command( int fd, std::vector<uint8_t>& data );
 
     //destructor
     ~Command();
@@ -94,39 +87,6 @@ public:
     std::vector<uint_fast32_t> uiparms_;
 
     bool valid_;
-
-#ifdef MEMORY_DEBUG
-public:
-    static void* operator new(size_t size)
-    {
-        void* memory = MALLOC(size);
-
-        MemleakRecorder::instance().alloc(__FILE__, __LINE__, memory);
-
-        return memory;
-    }
-
-    static void* operator new[](size_t size)
-    {
-        void* memory = MALLOC(size);
-
-        MemleakRecorder::instance().alloc(__FILE__, __LINE__, memory);
-
-        return memory;
-    }
-
-        static void operator delete(void* p)
-    {
-        MemleakRecorder::instance().release(p);
-        FREE(p);
-    }
-
-    static void operator delete[](void* p)
-    {
-        MemleakRecorder::instance().release(p);
-        FREE(p);
-    }
-#endif
 };
 
 #endif

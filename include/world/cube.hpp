@@ -6,13 +6,9 @@
 #include <system_error>
 #include <map>
 #include <set>
+#include <memory>
 
 #include "jsonw/jsonw.hpp"
-#include "world/creature.hpp"
-
-#ifdef MEMORY_DEBUG
-#include "memory/memleak.hpp"
-#endif
 
 namespace octillion
 {
@@ -41,7 +37,7 @@ public:
     uint_fast32_t z() { return z_axis_; }
 
     // convert cube position into json 
-    JsonW* json();
+    std::shared_ptr<JsonW> json();
 
     bool operator < (const CubePosition& rhs) const
     {
@@ -70,43 +66,12 @@ public:
         return *this;
     }
 
+
+
 private:
     uint_fast32_t x_axis_;
     uint_fast32_t y_axis_;
     uint_fast32_t z_axis_;
-
-#ifdef MEMORY_DEBUG
-public:
-    static void* operator new(size_t size)
-    {
-        void* memory = MALLOC(size);
-
-        MemleakRecorder::instance().alloc(__FILE__, __LINE__, memory);
-
-        return memory;
-    }
-
-    static void* operator new[](size_t size)
-    {
-        void* memory = MALLOC(size);
-
-        MemleakRecorder::instance().alloc(__FILE__, __LINE__, memory);
-
-        return memory;
-    }
-
-        static void operator delete(void* p)
-    {
-        MemleakRecorder::instance().release(p);
-        FREE(p);
-    }
-
-    static void operator delete[](void* p)
-    {
-        MemleakRecorder::instance().release(p);
-        FREE(p);
-    }
-#endif
 };
 
 class octillion::Cube
@@ -125,6 +90,8 @@ public:
 	const static uint_fast32_t MOB_CUBE = 0x1;
 	const static uint_fast32_t NPC_CUBE = 0x2;
 	const static uint_fast32_t GOD_CUBE = 0x80000000;
+    
+    const static uint_fast32_t EXIT_NORMAL = 0x1;
 
 	const static uint_fast32_t J_PLAYER = 0x01;
 	const static uint_fast32_t J_MOB = 0x02;
@@ -138,14 +105,14 @@ public:
 public:
     CubePosition loc() { return loc_; }
     uint_fast32_t area() { return areaid_; }
-	bool addlink(Cube* dest, uint_fast32_t attr);
-    bool addlink(Cube* dest);
+	bool addlink(std::shared_ptr<Cube> dest, uint_fast32_t attr);
+    bool addlink(std::shared_ptr<Cube> dest);
     std::string title() { return title_; }
 
     // convert cube information into json
     // 1 - Event::TYPE_JSON_SIMPLE, for login/logout/arrive/leave event usage
     // 2 - Event::TYPE_JSON_DETAIL, for detail event usage
-    JsonW* json(int type);
+    std::shared_ptr<JsonW> json(int type);
 
 	// help function, randomly pick one exit | exit_mask > 0.
 	// and cube arribute | attr_mask > 0.
@@ -173,7 +140,7 @@ public:
 	}
 
 public:
-	static std::error_code json2attr(JsonW* jattr, uint_fast32_t& attr);
+	static std::error_code json2attr(std::shared_ptr<JsonW> jattr, uint_fast32_t& attr);
 
     inline static int opposite_dir(int dir)
     {
@@ -190,7 +157,7 @@ public:
         }
     }
 
-	inline static int dir(Cube* from, Cube* to)
+	inline static int dir(std::shared_ptr<Cube> from, std::shared_ptr<Cube> to)
 	{
 		if (from->loc_.x() == to->loc_.x() && from->loc_.y() == to->loc_.y())
 		{
@@ -217,7 +184,7 @@ public:
 		return -1;
 	}
 
-	inline Cube* find(std::map<CubePosition, Cube*>& cubes_, int dir) 
+	inline std::shared_ptr<Cube> find(std::map<CubePosition, std::shared_ptr<Cube>>& cubes_, int dir) 
 	{
 		CubePosition cbloc;
 		switch (dir)
@@ -229,64 +196,30 @@ public:
 		case Y_DEC: cbloc.set(loc_.x(), loc_.y() - 1, loc_.z()); break;
 		case Z_DEC: cbloc.set(loc_.x(), loc_.y(), loc_.z() - 1); break;
 		default:
-			return NULL;
+			return nullptr;
 		}
 
 		auto it = cubes_.find(cbloc);
 		if (it == cubes_.end())
 		{
-			return NULL;
+			return nullptr;
 		}
 		return it->second;
 	}
 
-private:
+protected:
     int areaid_ = 0;
+
+private:
 	uint_fast32_t attr_ = 0xFFFFFFFF;
     CubePosition loc_;
     std::string title_;
 
-	std::set<Creature*>* mobs_ = NULL;
-	std::set<Creature*>* players_ = NULL;
-
 public:
 	uint_fast32_t exits_[6];
 
-	friend class World;
+	friend class WorldMap;
 
-
-#ifdef MEMORY_DEBUG
-public:
-    static void* operator new(size_t size)
-    {
-        void* memory = MALLOC(size);
-
-        MemleakRecorder::instance().alloc(__FILE__, __LINE__, memory);
-
-        return memory;
-    }
-
-    static void* operator new[](size_t size)
-    {
-        void* memory = MALLOC(size);
-
-        MemleakRecorder::instance().alloc(__FILE__, __LINE__, memory);
-
-        return memory;
-    }
-
-        static void operator delete(void* p)
-    {
-        MemleakRecorder::instance().release(p);
-        FREE(p);
-    }
-
-    static void operator delete[](void* p)
-    {
-        MemleakRecorder::instance().release(p);
-        FREE(p);
-    }
-#endif
 };
 
 class octillion::Area
@@ -295,13 +228,13 @@ private:
     const std::string tag_ = "Area";
 
 public:
-    Area(JsonW* json);
+    Area(std::shared_ptr<JsonW> json);
     ~Area();
 
     bool valid() { return valid_; }
     int id() { return id_; }
     std::string title() { return title_; }
-    Cube* cube(CubePosition loc);
+    std::shared_ptr<Cube> cube(CubePosition loc);
 
     int offset_x() { return offset_x_; }
     int offset_y() { return offset_y_; }
@@ -310,17 +243,17 @@ public:
 public:
     // read the mark string and cube in "cubes" in json
     static bool getmark(
-        const JsonW* json, 
-        std::map<std::string, Cube*>& marks,
-        const std::map<CubePosition, Cube*>& cubes);
+        const std::shared_ptr<JsonW> json, 
+        std::map<std::string, std::shared_ptr<Cube>> &marks,
+        const std::map<CubePosition, std::shared_ptr<Cube>>& cubes);
 
 public:
-    std::map<CubePosition, Cube*> cubes_;
+    std::map<CubePosition, std::shared_ptr<Cube>> cubes_;
 
 public:
-    static bool readloc( const JsonW* jvalue, CubePosition& pos, uint_fast32_t offset_x, uint_fast32_t offset_y, uint_fast32_t offset_z );
-	static bool addlink(bool is_2way, Cube* from, Cube* to, uint_fast32_t attr );
-    static bool addlink( bool is_2way, Cube* from, Cube* to);
+    static bool readloc( const std::shared_ptr<JsonW> jvalue, CubePosition& pos, uint_fast32_t offset_x, uint_fast32_t offset_y, uint_fast32_t offset_z );
+	static bool addlink( bool is_2way, std::shared_ptr<Cube> from, std::shared_ptr<Cube> to, uint_fast32_t attr );
+    static bool addlink( bool is_2way, std::shared_ptr<Cube> from, std::shared_ptr<Cube> to);
 
 private:
     bool valid_ = false;
@@ -330,40 +263,7 @@ private:
 
 private:
 
-	friend class World;
-
-#ifdef MEMORY_DEBUG
-public:
-    static void* operator new(size_t size)
-    {
-        void* memory = MALLOC(size);
-
-        MemleakRecorder::instance().alloc(__FILE__, __LINE__, memory);
-
-        return memory;
-    }
-
-    static void* operator new[](size_t size)
-    {
-        void* memory = MALLOC(size);
-
-        MemleakRecorder::instance().alloc(__FILE__, __LINE__, memory);
-
-        return memory;
-    }
-
-        static void operator delete(void* p)
-    {
-        MemleakRecorder::instance().release(p);
-        FREE(p);
-    }
-
-    static void operator delete[](void* p)
-    {
-        MemleakRecorder::instance().release(p);
-        FREE(p);
-    }
-#endif
+	friend class WorldMap;
 };
 
 #endif

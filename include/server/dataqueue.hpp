@@ -30,7 +30,9 @@ class octillion::DataQueue
         size_t size();        
         size_t peek();
         std::error_code pop( int& fd, uint8_t* buf, size_t buflen );
+        std::error_code pop( int& fd, std::vector<uint8_t>& buf );
         std::error_code feed( int fd, uint8_t* buf, size_t buflen );
+        std::error_code feed( int fd, std::vector<uint8_t>& buf );
         
         void remove( int fd );
         

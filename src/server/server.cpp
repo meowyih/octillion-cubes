@@ -199,10 +199,8 @@ void octillion::Server::core_task()
                 continue;
             }
             
-            // ret = ::write( itsocket->second.fd, (*it).data, (*it).datalen );
             ret = ::write( itsocket->second.fd, (*it).data->data(), (*it).data->size() );
             
-            // if ( ret == (*it).datalen )
             if ( ret == (*it).data->size() )
             {
                 LOG_D( tag_ ) << "core_task, write done, fd:" << (*it).fd;
@@ -216,19 +214,30 @@ void octillion::Server::core_task()
             else if ( ret >= 0 ) // partial write
             {
                 // start to listen the EPOLLOUT event
-                LOG_D(tag_) << "fd:" << (*it).fd << " start to listen EPOLLOUT";
+                LOG_D(tag_) << "partial write, fd:" << (*it).fd << " starts to listen EPOLLOUT";
                 event.data.fd = (*it).fd;
                 event.events = EPOLLIN | EPOLLOUT | EPOLLET;
-                ret = epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, (*it).fd, &event);
                 itsocket->second.writable = false;
-                ++it;
                 
-                if ( ret > 0 )
+                if ( epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, (*it).fd, &event) == -1 )
                 {
-                    // copy the remaining partial data                    
+                    // epoll_ctl failed
+                    LOG_E(tag_) << "failed to set EPOLLOUT due to the partial write, ret:" << ret
+                        << " errno:" << errno << " " << strerror( errno );
+                    requestclosefd( itsocket->second.fd );
                     (*it).data.reset();
-                    (*it).data = std::make_shared<std::vector<uint8_t>>(
+                    it = out_data_.erase(it);
+                }
+                else
+                {
+                    // copy the remaining partial data
+                    std::shared_ptr<std::vector<uint8_t>> pdata =
+                        std::make_shared<std::vector<uint8_t>>(
                         (*it).data->begin() + ret, (*it).data->end() );
+                    (*it).data.reset();
+                    (*it).data = pdata;
+                        
+                    ++it;
                 }
             }
             else 
@@ -244,10 +253,7 @@ void octillion::Server::core_task()
         
         out_data_lock_.unlock();
                             
-        LOG_D(tag_) << "epoll_wait() enter";
         epollret = epoll_wait( epoll_fd_, events.get(), kEpollBufferSize, kEpollTimeout );
-        
-        LOG_D(tag_) << "epoll_wait() ret events: " << epollret;
                 
         if ( epollret == -1 )
         {
@@ -256,12 +262,7 @@ void octillion::Server::core_task()
         }
         
         for ( int i = 0; i < epollret; i ++ )
-        {   
-            // debug purpose
-            LOG_D(tag_) << "epoll event " << i << "/" << epollret 
-                << " events:" << get_epoll_event( events[i].events )
-                << " fd:" << events[i].data.fd;     
-            
+        {
             // handle the bad event
             if (( events[i].events & EPOLLERR ) ||
                 ( events[i].events & EPOLLHUP ) ||

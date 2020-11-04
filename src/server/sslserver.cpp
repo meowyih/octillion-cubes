@@ -31,17 +31,12 @@ octillion::SslServer::SslServer()
 
 octillion::SslServer::~SslServer()
 {   
-    // not to block the thread by core_thread_.join()
+    // we don't block the thread by calling core_thread_.join()
     // caller should use stop() before delete the SslServer from memory
     core_thread_flag_ = false;
     core_thread_ = NULL;
     
-    // clean up SSL_write retry waiting list
-    // for (auto it = out_data_.begin(); it != out_data_.end(); ++it ) 
-    // {
-    //    LOG_W( tag_ ) << "~SslServer, remove waiting list fd:" << (*it).fd;
-    //    delete [] (*it).data;
-    // }
+    // clean up SSL_write waiting list
     out_data_.clear();
     
     LOG_D(tag_) << "~SslServer()";
@@ -243,7 +238,6 @@ void octillion::SslServer::core_task()
             if ( ret > 0 )
             {
                 LOG_D( tag_ ) << "core_task, SSL_write done, fd:" << (*it).fd;
-                // delete [] (*it).data;
                 (*it).data.reset();                
                 it = out_data_.erase(it);
             }
@@ -255,21 +249,25 @@ void octillion::SslServer::core_task()
                     sslerror == SSL_ERROR_WANT_WRITE )
                 {
                     itsocket->second.writable = false;
-                    ++it;
                     
                     // start to listen the EPOLLOUT event
                     LOG_D(tag_) << "fd:" << (*it).fd << " start to listen EPOLLOUT";
                     event.data.fd = (*it).fd;
                     event.events = EPOLLIN | EPOLLOUT | EPOLLET;
-                    ret = epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, (*it).fd, &event);
                     
-                    if( ret == -1 )
+                    if( epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, (*it).fd, &event) == -1 )
                     {
                         // something really bad happens
                         LOG_E(tag_) << "Error, epoll_ctl mod EPOLLOUT failed, fd " << (*it).fd 
                            << " errno: " << errno
                            << " message: " << strerror( errno );
                         requestclosefd( (*it).fd );
+                        (*it).data.reset();                
+                        it = out_data_.erase(it);
+                    }
+                    else
+                    {
+                        ++it;
                     }
                 }
                 else
@@ -277,7 +275,6 @@ void octillion::SslServer::core_task()
                     // something bad happen, remove the data and close the socket later
                     LOG_W( tag_ ) << "core_task, senddata failed, fd:" << (*it).fd;
                     requestclosefd( (*it).fd );
-                    // delete [] (*it).data;
                     (*it).data.reset();
                     it = out_data_.erase(it);
                     
@@ -289,15 +286,13 @@ void octillion::SslServer::core_task()
             {
                 LOG_D(tag_) << "close fd:" << (*it).fd << " after write";
                 requestclosefd( (*it).fd );
+                ++it;
             }
         }
         
         out_data_lock_.unlock();
-                            
-        LOG_D(tag_) << "epoll_wait() enter";
+
         epollret = epoll_wait( epoll_fd_, events.get(), kEpollBufferSize, kEpollTimeout );
-        
-        LOG_D(tag_) << "epoll_wait() ret events: " << epollret;
                 
         if ( epollret == -1 )
         {
@@ -307,10 +302,6 @@ void octillion::SslServer::core_task()
         
         for ( int i = 0; i < epollret; i ++ )
         {   
-            // debug purpose
-            LOG_D(tag_) << "epoll event " << i << "/" << epollret 
-                << " events:" << get_epoll_event( events[i].events );     
-            
             // handle the bad event
             if (( events[i].events & EPOLLERR ) ||
                 ( events[i].events & EPOLLHUP ) ||
@@ -469,8 +460,6 @@ void octillion::SslServer::core_task()
                 if ( ! SSL_is_init_finished(ssl) )
                 {
                     // handshake should already be done during SSL_accept();
-                    // LOG_E(tag_) << "SSL_is_init_finished return false, close fd " << events[i].data.fd;
-                    // closesocket( events[i].data.fd );
                     LOG_D(tag_) << "retry SSL_accept";
                     ret = SSL_accept(ssl);
                     

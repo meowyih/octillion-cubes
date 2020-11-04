@@ -4,6 +4,7 @@
 #include <system_error>
 #include <map>
 #include <set>
+#include <memory>
 #include <cstdlib> // rand()
 
 #include "world/cube.hpp"
@@ -77,9 +78,9 @@ std::string octillion::CubePosition::str()
     return oss.str();
 }
 
-octillion::JsonW* octillion::CubePosition::json()
+std::shared_ptr<JsonW> octillion::CubePosition::json()
 {
-    JsonW* jobject = new JsonW();
+    std::shared_ptr<JsonW> jobject = std::make_shared<JsonW>();
     jobject->add("x", (int)x_axis_);
     jobject->add("y", (int)y_axis_);
     jobject->add("z", (int)z_axis_);
@@ -115,7 +116,7 @@ octillion::Cube::~Cube()
 {
 }
 
-bool octillion::Cube::addlink(Cube* dest, uint_fast32_t attr)
+bool octillion::Cube::addlink(std::shared_ptr<Cube> dest, uint_fast32_t attr)
 {
 	CubePosition to = dest->loc();
 	if (to.x() == loc_.x() + 1 && to.y() == loc_.y() && to.z() == loc_.z())
@@ -150,54 +151,27 @@ bool octillion::Cube::addlink(Cube* dest, uint_fast32_t attr)
 	return true;
 }
 
-bool octillion::Cube::addlink(Cube* dest)
+bool octillion::Cube::addlink(std::shared_ptr<Cube> dest)
 {
-	return addlink(dest, dest->attr_);
+	return addlink(dest, EXIT_NORMAL);
 }
 
 // parameter type
 // 1 - Event::TYPE_JSON_SIMPLE, for login/logout/arrive/leave event usage
 // 2 - Event::TYPE_JSON_DETAIL, for detail event usage
-octillion::JsonW* octillion::Cube::json(int type)
+std::shared_ptr<JsonW> octillion::Cube::json(int type)
 {
-	JsonW* jobject = new JsonW();
+	std::shared_ptr<JsonW> jobject = std::make_shared<JsonW>();
     jobject->add("loc", loc_.json() );
     jobject->add("area", areaid_);
 
-	if ((type & J_PLAYER) != 0)
-	{
-		if (players_ != NULL && players_->size() > 0)
-		{
-			JsonW* jarray = new JsonW();
-			for (auto& it : *players_)
-			{
-				Player* player = static_cast<Player*>(it);
-				jarray->add(player->json(0));
-			}
-			jobject->add(u8"players", jarray);
-		}
-	}
-
-	if ((type & J_MOB) != 0)
-	{
-		if (mobs_ != NULL && mobs_->size() > 0)
-		{
-			JsonW* jarray = new JsonW();
-			for (auto& it : *mobs_)
-			{
-				Mob* mob = static_cast<Mob*>(it);
-				jarray->add(mob->json(0));
-			}
-			jobject->add(u8"mobs", jarray);
-		}
-	}
     return jobject;
 }
 
-octillion::Area::Area( JsonW* json )
+octillion::Area::Area( std::shared_ptr<JsonW> json )
 {
     std::map<std::string, CubePosition> markmap;
-    JsonW* jvalue;
+    std::shared_ptr<JsonW> jvalue;
     
     // invalid json
     if ( json == NULL || json->valid() == false )
@@ -263,7 +237,7 @@ octillion::Area::Area( JsonW* json )
         bool ret;
         
         // "cubes" array must contains only object
-        JsonW* jcube = jvalue->get(i);
+        std::shared_ptr<JsonW> jcube = jvalue->get(i);
 
         if (jcube == NULL ) // not possible
         {
@@ -286,14 +260,14 @@ octillion::Area::Area( JsonW* json )
         }
         
         // get title
-        JsonW* jtitle = jcube->get( u8"title" );
+        std::shared_ptr<JsonW> jtitle = jcube->get( u8"title" );
         if ( jtitle == NULL || jtitle->type() != JsonW::STRING || jtitle->str().length() == 0 )
         {
             return;
         }
 
         // get mark if exist (optional)        
-        JsonW* jmark = jcube->get( u8"mark" );
+        std::shared_ptr<JsonW> jmark = jcube->get( u8"mark" );
         if (jmark != NULL && jmark->type() == JsonW::STRING )
         {
             std::string markstr = jmark->str();
@@ -316,7 +290,7 @@ octillion::Area::Area( JsonW* json )
         }
 
 		// get attr if exist (optional)
-		JsonW* jattrs = jcube->get(u8"attr");
+		std::shared_ptr<JsonW> jattrs = jcube->get(u8"attr");
 		uint_fast32_t attr;
 		if (Cube::json2attr(jattrs, attr) != OcError::E_SUCCESS)
 		{
@@ -324,7 +298,7 @@ octillion::Area::Area( JsonW* json )
 		}
                 
         // create cube and store in cubes_
-        Cube* cube = new Cube( pos, jtitle->str(), id_, attr);
+        std::shared_ptr<Cube> cube = std::make_shared<Cube>( pos, jtitle->str(), id_, attr);
         cubes_[pos] = cube;
     }
     
@@ -335,8 +309,8 @@ octillion::Area::Area( JsonW* json )
         bool ret;
 		for (size_t i = 0; i < jvalue->size(); i++)
 		{
-			JsonW* jlink = jvalue->get(i);
-			JsonW* jlinkvalue;
+			std::shared_ptr<JsonW> jlink = jvalue->get(i);
+			std::shared_ptr<JsonW> jlinkvalue;
 
 			if (jlink == NULL || jlink->type() != JsonW::OBJECT)
 			{
@@ -344,7 +318,7 @@ octillion::Area::Area( JsonW* json )
 			}
 
 			bool twoway = true;
-			JsonW* jtype = jlink->get(u8"type");
+			std::shared_ptr<JsonW> jtype = jlink->get(u8"type");
 			if (jtype != NULL && jtype->type() == JsonW::STRING)
 			{
 				if (jtype->str() == u8"1way")
@@ -431,7 +405,7 @@ octillion::Area::Area( JsonW* json )
 			}
 
 			// get attr if exist (optional)
-			JsonW* jattrs = jlink->get(u8"attr");
+			std::shared_ptr<JsonW> jattrs = jlink->get(u8"attr");
 			bool hasattrs = false;
 			uint_fast32_t attr;
 			if (Cube::json2attr(jattrs, attr) == OcError::E_SUCCESS)
@@ -440,8 +414,8 @@ octillion::Area::Area( JsonW* json )
 			}
 
 			// add link for each cube
-			Cube* cubefrom = cubes_[from];
-			Cube* cubeto = cubes_[to];
+			std::shared_ptr<Cube> cubefrom = cubes_[from];
+			std::shared_ptr<Cube> cubeto = cubes_[to];
 
 			if (hasattrs)
 			{
@@ -458,17 +432,16 @@ octillion::Area::Area( JsonW* json )
     return;
 }
 
-std::error_code octillion::Cube::json2attr(JsonW* jattrs, uint_fast32_t& attr)
+std::error_code octillion::Cube::json2attr(std::shared_ptr<JsonW> jattrs, uint_fast32_t& attr)
 {
 	if (jattrs == NULL || jattrs->type() != JsonW::ARRAY )
 	{
 		return OcError::E_FATAL;
 	}
 
-	attr = 0xFFFFFFFF;
 	for (size_t idx = 0; idx < jattrs->size(); idx++)
 	{
-		JsonW* jattr = jattrs->get(idx);
+		std::shared_ptr<JsonW> jattr = jattrs->get(idx);
 		std::string attrstr = jattr->str();
 
 		if (attrstr == "nomob")
@@ -483,7 +456,7 @@ std::error_code octillion::Cube::json2attr(JsonW* jattrs, uint_fast32_t& attr)
 	return OcError::E_SUCCESS;
 }
 
-octillion::Cube* octillion::Area::cube(CubePosition loc)
+std::shared_ptr<octillion::Cube> octillion::Area::cube(CubePosition loc)
 {
     auto it = cubes_.find(loc);
 
@@ -497,10 +470,10 @@ octillion::Cube* octillion::Area::cube(CubePosition loc)
     }
 }
 
-bool octillion::Area::readloc( const JsonW* jvalue, CubePosition& pos, uint_fast32_t offset_x, uint_fast32_t offset_y, uint_fast32_t offset_z )
+bool octillion::Area::readloc( const std::shared_ptr<JsonW> jvalue, CubePosition& pos, uint_fast32_t offset_x, uint_fast32_t offset_y, uint_fast32_t offset_z )
 {
     uint_fast32_t x, y, z;
-    if ( jvalue == NULL || jvalue->valid() == false || jvalue->type() != JsonW::ARRAY )
+    if ( jvalue == nullptr || jvalue->valid() == false || jvalue->type() != JsonW::ARRAY )
     {
         return false;
     }
@@ -525,7 +498,7 @@ bool octillion::Area::readloc( const JsonW* jvalue, CubePosition& pos, uint_fast
     return true;
 }
 
-bool octillion::Area::addlink(bool is_2way, Cube* from, Cube* to, uint_fast32_t attr )
+bool octillion::Area::addlink(bool is_2way, std::shared_ptr<Cube> from, std::shared_ptr<Cube> to, uint_fast32_t attr )
 {
 	// 2-way link
 	if (is_2way)
@@ -548,7 +521,7 @@ bool octillion::Area::addlink(bool is_2way, Cube* from, Cube* to, uint_fast32_t 
 	}
 }
 
-bool octillion::Area::addlink(bool is_2way, Cube* from, Cube* to)
+bool octillion::Area::addlink(bool is_2way, std::shared_ptr<Cube> from, std::shared_ptr<Cube> to)
 {
     // 2-way link
     if (is_2way)
@@ -573,32 +546,31 @@ bool octillion::Area::addlink(bool is_2way, Cube* from, Cube* to)
 
 octillion::Area::~Area()
 {
-    for (auto& it : cubes_)
-    {
-        if (it.second != NULL)
-        {
-            delete it.second;
-        }
-    }
 }
 
-// read the mark string and cube position in "cubes" in json
+// read the mark string and cube position in "cubes" value
 bool octillion::Area::getmark(
-    const JsonW* json,
-    std::map<std::string, Cube*>& marks,
-    const std::map<CubePosition, Cube*>& cubes )
-{
+        const std::shared_ptr<JsonW> json, 
+        std::map<std::string, std::shared_ptr<Cube>>& marks,
+        const std::map<CubePosition, std::shared_ptr<Cube>>& cubes)
+{ 
+    // static func cannot access area::tag_, create a fake one
+    std::string tag_ = "Area";
+    
     int offset_x, offset_y, offset_z;
     size_t size;
-    JsonW* jcubes = json->get(u8"cubes");
-    if (jcubes == NULL || jcubes->type() != JsonW::ARRAY)
+    
+    std::string areaid = std::to_string(json->get(u8"id")->integer());
+    
+    std::shared_ptr<JsonW> jcubes = json->get(u8"cubes");    
+    if (jcubes == nullptr || jcubes->type() != JsonW::ARRAY)
     {
         return false;
     }
 
     // area json must have offset array
-    JsonW* jvalue = json->get(u8"offset");
-    if (jvalue == NULL || jvalue->type() != JsonW::ARRAY)
+    std::shared_ptr<JsonW> jvalue = json->get(u8"offset");
+    if (jvalue == nullptr || jvalue->type() != JsonW::ARRAY)
     {
         return false;
     }
@@ -619,10 +591,10 @@ bool octillion::Area::getmark(
     {
         bool ret;
         CubePosition pos;
-        JsonW* jcube = jcubes->get(idx);
-        JsonW* jmark = jcube->get("mark");
+        std::shared_ptr<JsonW> jcube = jcubes->get(idx);
+        std::shared_ptr<JsonW> jmark = jcube->get("mark");
 
-        if (jmark == NULL || jmark->type() != JsonW::STRING)
+        if (jmark == nullptr || jmark->type() != JsonW::STRING)
         {
             continue;
         }
@@ -640,7 +612,33 @@ bool octillion::Area::getmark(
         }
         else
         {
-            marks[jmark->str()] = itcube->second;
+            std::string mark = jmark->str();
+            
+            if ( mark.find( '@' ) != std::string::npos )
+            {
+                LOG_E("Area") << "Invalid area data, id " << areaid << ", mark must not contain '@'";
+                return false;
+            }
+            
+            // format 'mark' as areaid@mark
+            mark = areaid + std::string( "@" ) + jmark->str();
+            
+            std::shared_ptr<Cube> cube = itcube->second;
+            
+            if ( cube == nullptr )
+            {
+                octillion::CubePosition pos = itcube->first;
+                LOG_E("Area") << "Fatal error, cube is nullptr for " << pos.json()->text();
+                return false;
+            }
+            
+            if ( marks.find( mark ) != marks.end())
+            {
+                LOG_E("Area") << "Fatal error, duplicate mark " << mark;
+                return false;
+            }
+            
+            marks.insert(std::pair<std::string, std::shared_ptr<Cube>>(mark, cube));
         }
     }
 
