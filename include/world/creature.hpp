@@ -1,6 +1,8 @@
 #ifndef OCTILLION_CREATURE_HEADER
 #define OCTILLION_CREATURE_HEADER
 
+#include "world/cube.hpp"
+
 namespace octillion
 {
 	class Creature;

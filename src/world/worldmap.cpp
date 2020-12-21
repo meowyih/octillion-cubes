@@ -8,6 +8,8 @@
 
 #include "world/cube.hpp"
 #include "world/worldmap.hpp"
+#include "world/mob.hpp"
+#include "world/stringtable.hpp"
 
 #include "jsonw/jsonw.hpp"
 
@@ -52,7 +54,7 @@ std::shared_ptr<octillion::Cube> octillion::WorldMap::readloc(
     }
     else if (jloc->type() == JsonW::ARRAY)
     {
-        std::shared_ptr<JsonW> joffset = jloc->get(u8"offset");
+        std::shared_ptr<JsonW> joffset = json->get(u8"offset");
         bool ret;
         octillion::CubePosition offset;
         octillion::CubePosition cubepos;
@@ -88,7 +90,7 @@ std::shared_ptr<octillion::Cube> octillion::WorldMap::readloc(
     }
 }
 
-bool octillion::WorldMap::load_external_data_file( std::string directory )
+bool octillion::WorldMap::load_external_data_file( std::string directory, bool utf16 )
 {
     // global configuration json file name
     std::string global_config_filepath = directory + global_config_filename_;
@@ -178,29 +180,77 @@ bool octillion::WorldMap::load_external_data_file( std::string directory )
 			LOG_E(tag_) << "Failed to init area file:" << (*it).second;
 			return false;
         }
+
+        // read area cubes
+        std::shared_ptr<octillion::Area> area = std::make_shared<octillion::Area>(json);
+
+        if (area->valid())
+        {
+            areas_.insert(std::pair<int, std::shared_ptr<octillion::Area>>(area->id(), area));
+        }
         else
         {
-            // read area cubes
-            std::shared_ptr<octillion::Area> area = std::make_shared<octillion::Area>(json);
+            LOG_E(tag_) << "failed to load area file: " << (*it).second;
+            return false;
+        }
+        
+        LOG_I(tag_) << "load area:" << area->id() << " contains cubes:" << area->cubes_.size();
+        
+        if ( Area::getmark(json, marks, area->cubes_) == false )
+        {
+            LOG_E(tag_) << "failed to load marks in area file: " << (*it).second;
+            return false;
+        }
 
-            if (area->valid())
+        // read area mob meta
+        std::shared_ptr<JsonW> jmobs = json->get( u8"mobs" );
+        
+        if ( jmobs != nullptr && jmobs->type() == JsonW::ARRAY && jmobs->size() > 0 )
+        {
+            for ( size_t idx = 0; idx < jmobs->size(); idx ++ )
             {
-                areas_.push_back(area);
-            }
-            else
-            {
-				LOG_E(tag_) << "World() failed to load area file: " << (*it).second;
-                return false;
-            }
-            
-            LOG_I(tag_) << "World() load area:" << area->id() << " contains cubes:" << area->cubes_.size();
-            
-            if ( Area::getmark(json, marks, area->cubes_) == false )
-            {
-                LOG_E(tag_) << "World() failed to load marks in area file: " << (*it).second;
-                return false;
+                octillion::Mob mob;
+                
+                int_fast32_t refid;
+                
+                if ( ! octillion::Mob::valid( jmobs->get(idx) ))
+                {
+                    LOG_E(tag_) << "failed to load mobs in area file: " << (*it).second;
+                    return false;
+                }
+                
+                refid = octillion::Mob::refid( jmobs->get(idx) );
+
+                if ( refid != 0 )
+                {
+                    // TODO: find the mob with refid, then mob = mob(refid)
+                    auto itmob = mobs_.find( octillion::Mob::calc_id( area->id(), refid ));
+                    
+                    if ( itmob == mobs_.end() )
+                    {
+                        LOG_E(tag_) << "failed to load mobs in area file: " 
+                            << (*it).second << " mob's refid " << refid;
+                        return false;
+                    }
+                    
+                    mob = (*itmob).second;
+                }
+                
+                mob.load( area->id(), jmobs->get(idx));
+                
+                mobs_.insert( std::pair<int_fast32_t,octillion::Mob>(mob.id_, mob));
             }
         }
+
+        // read mob
+        for ( auto mob = mobs_.begin(); mob != mobs_.end(); mob ++ )
+        {
+            LOG_I(tag_) << "mob id:" << (*mob).first 
+                << " short:" << (*mob).second.short_ 
+                << " long:" << (*mob).second.long_;
+        }
+
+        LOG_I(tag_) << "load area:" << area->id() << " contains mob:" << mobs_.size();
 
         fin.close();
     }
@@ -208,12 +258,53 @@ bool octillion::WorldMap::load_external_data_file( std::string directory )
     // create cubes short cut to areas_
     for (const auto& it : areas_)
     {
-        for (const auto& mapit : it->cubes_)
+        for (const auto& mapit : it.second->cubes_)
         {
             cubes_[mapit.first] = mapit.second;
         }
     }
-    
+
+    // check the adjacent for all cubes
+    for (auto itcube = cubes_.begin(); itcube != cubes_.end(); itcube++)
+    {
+        if ((*itcube).second->find(cubes_, octillion::Cube::X_INC) != nullptr)
+            (*itcube).second->adjacent_cubes_[octillion::Cube::X_INC] = octillion::Cube::EXIT_NORMAL;
+        if ((*itcube).second->find(cubes_, octillion::Cube::X_DEC) != nullptr)
+            (*itcube).second->adjacent_cubes_[octillion::Cube::X_DEC] = octillion::Cube::EXIT_NORMAL;
+        if ((*itcube).second->find(cubes_, octillion::Cube::Y_INC) != nullptr)
+            (*itcube).second->adjacent_cubes_[octillion::Cube::Y_INC] = octillion::Cube::EXIT_NORMAL;
+        if ((*itcube).second->find(cubes_, octillion::Cube::Y_DEC) != nullptr)
+            (*itcube).second->adjacent_cubes_[octillion::Cube::Y_DEC] = octillion::Cube::EXIT_NORMAL;
+        if ((*itcube).second->find(cubes_, octillion::Cube::Z_INC) != nullptr)
+            (*itcube).second->adjacent_cubes_[octillion::Cube::Z_INC] = octillion::Cube::EXIT_NORMAL;
+        if ((*itcube).second->find(cubes_, octillion::Cube::Z_DEC) != nullptr)
+            (*itcube).second->adjacent_cubes_[octillion::Cube::Z_DEC] = octillion::Cube::EXIT_NORMAL;
+        if ((*itcube).second->find(cubes_, octillion::Cube::X_INC_Y_INC) != nullptr)
+        {
+            auto adjcube = (*itcube).second->find(cubes_, octillion::Cube::X_INC_Y_INC);
+            if ( adjcube->exits_[octillion::Cube::X_DEC] != 0 && adjcube->exits_[octillion::Cube::Y_DEC] != 0 )
+                (*itcube).second->adjacent_cubes_[octillion::Cube::X_INC_Y_INC] = octillion::Cube::EXIT_NORMAL;
+        }
+        if ((*itcube).second->find(cubes_, octillion::Cube::X_DEC_Y_INC) != nullptr)
+        {
+            auto adjcube = (*itcube).second->find(cubes_, octillion::Cube::X_DEC_Y_INC);
+            if (adjcube->exits_[octillion::Cube::X_INC] != 0 && adjcube->exits_[octillion::Cube::Y_DEC] != 0)
+                (*itcube).second->adjacent_cubes_[octillion::Cube::X_DEC_Y_INC] = octillion::Cube::EXIT_NORMAL;
+        }
+        if ((*itcube).second->find(cubes_, octillion::Cube::X_INC_Y_DEC) != nullptr)
+        {
+            auto adjcube = (*itcube).second->find(cubes_, octillion::Cube::X_INC_Y_DEC);
+            if (adjcube->exits_[octillion::Cube::X_DEC] != 0 && adjcube->exits_[octillion::Cube::Y_INC] != 0)
+                (*itcube).second->adjacent_cubes_[octillion::Cube::X_INC_Y_DEC] = octillion::Cube::EXIT_NORMAL;
+        }
+        if ((*itcube).second->find(cubes_, octillion::Cube::X_DEC_Y_DEC) != nullptr)
+        {
+            auto adjcube = (*itcube).second->find(cubes_, octillion::Cube::X_DEC_Y_DEC);
+            if (adjcube->exits_[octillion::Cube::X_INC] != 0 && adjcube->exits_[octillion::Cube::Y_INC] != 0)
+                (*itcube).second->adjacent_cubes_[octillion::Cube::X_DEC_Y_DEC] = octillion::Cube::EXIT_NORMAL;
+        }
+    }
+
     // read reborn loc
     std::shared_ptr<JsonW> jreborn = jglobal->get(u8"reborn");
     
@@ -253,8 +344,7 @@ bool octillion::WorldMap::load_external_data_file( std::string directory )
         // get link type, area 'from' id, area 'to' id
         std::string linktype = jglink->get(u8"type")->str();
 		bool is_twoway = true;
-        int area_from = (int)jfrom->get(u8"area")->integer();
-        int area_to = (int)jto->get(u8"area")->integer();
+
 		if (linktype == "1way")
 		{
 			is_twoway = false;
@@ -269,7 +359,7 @@ bool octillion::WorldMap::load_external_data_file( std::string directory )
 
         if (from == nullptr || to == nullptr)
         {
-            LOG_E(tag_) << "World() bad json " << jglink->text();
+            LOG_E(tag_) << "bad loc in json " << jglink->text();
             continue;
         }
 		
@@ -288,7 +378,7 @@ bool octillion::WorldMap::load_external_data_file( std::string directory )
         // create link
         if (ret == false)
         {
-            LOG_E(tag_) << "World(), failed to add link between " 
+            LOG_E(tag_) << "failed to add link between " 
                 << from->loc().str() << " " << to->loc().str();
         }
         else
@@ -300,7 +390,7 @@ bool octillion::WorldMap::load_external_data_file( std::string directory )
     // add areaid in each cube
     for ( auto itarea = areas_.begin(); itarea != areas_.end(); itarea ++ )
     {
-        std::shared_ptr<octillion::Area> area = (*itarea);
+        std::shared_ptr<octillion::Area> area = (*itarea).second;
 
         for ( auto it = area->cubes_.begin(); it != area->cubes_.end(); it ++ )
         {
@@ -310,7 +400,7 @@ bool octillion::WorldMap::load_external_data_file( std::string directory )
     
     for ( auto itarea = areas_.begin(); itarea != areas_.end(); itarea ++ )
     {
-        std::shared_ptr<octillion::Area> area = (*itarea);
+        std::shared_ptr<octillion::Area> area = (*itarea).second;
 
         for ( auto it = area->cubes_.begin(); it != area->cubes_.end(); it ++ )
         {
@@ -330,7 +420,7 @@ void octillion::WorldMap::dump()
 
     for ( auto itarea = areas_.begin(); itarea != areas_.end(); itarea ++ )
     {
-        std::shared_ptr<octillion::Area> area = (*itarea);
+        std::shared_ptr<octillion::Area> area = (*itarea).second;
         
         LOG_I(tag_) << "[" << area->title() << "]";
 

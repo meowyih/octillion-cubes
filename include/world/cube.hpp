@@ -9,6 +9,7 @@
 #include <memory>
 
 #include "jsonw/jsonw.hpp"
+#include "world/stringtable.hpp"
 
 namespace octillion
 {
@@ -32,9 +33,9 @@ public:
 
     std::string str();
 public:
-    uint_fast32_t x() { return x_axis_; }
-    uint_fast32_t y() { return y_axis_; }
-    uint_fast32_t z() { return z_axis_; }
+    uint_fast32_t x() const { return x_axis_; }
+    uint_fast32_t y() const { return y_axis_; }
+    uint_fast32_t z() const { return z_axis_; }
 
     // convert cube position into json 
     std::shared_ptr<JsonW> json();
@@ -57,6 +58,11 @@ public:
         return false;
     }
 
+    bool operator == (const CubePosition& rhs) const
+    {
+        return x_axis_ == rhs.x_axis_ && y_axis_ == rhs.y_axis_ && z_axis_ == rhs.z_axis_;
+    }
+
     CubePosition& operator = (const CubePosition& rhs)
     {
         x_axis_ = rhs.x_axis_;
@@ -66,13 +72,31 @@ public:
         return *this;
     }
 
-
-
 private:
     uint_fast32_t x_axis_;
     uint_fast32_t y_axis_;
     uint_fast32_t z_axis_;
 };
+
+// add a hash function for CubePosition for unordered_map usage
+namespace std {
+
+    template <>
+    struct hash<octillion::CubePosition>
+    {
+        std::size_t operator()(const octillion::CubePosition& key) const
+        {
+            // we don't care about the overflow
+            std::size_t a = (std::size_t)key.x();
+            std::size_t b = (std::size_t)key.y();
+            std::size_t c = (std::size_t)key.z();
+
+            // cantor pairing function x 2
+            std::size_t d = 5 * (a + b) * (a + b + 1) + b;
+            return 5 * (c + d) * (c + d + 1) + d;
+        }
+    };
+}
 
 class octillion::Cube
 {
@@ -86,6 +110,12 @@ public:
     const static int X_DEC = 3;
     const static int Y_DEC = 0;
     const static int Z_DEC = 5;
+
+    const static int X_INC_Y_INC = 6;
+    const static int X_INC_Y_DEC = 7;
+    const static int X_DEC_Y_INC = 8;
+    const static int X_DEC_Y_DEC = 9;
+    const static int TOTAL_EXIT = 10;
 	
 	const static uint_fast32_t MOB_CUBE = 0x1;
 	const static uint_fast32_t NPC_CUBE = 0x2;
@@ -98,7 +128,7 @@ public:
 
 public:
     Cube(const CubePosition& loc);
-    Cube(const CubePosition& loc, const std::string& title, int areaid, uint_fast32_t attr );
+    Cube(const CubePosition& loc, std::shared_ptr<octillion::StringData> title, int areaid, uint_fast32_t attr );
     Cube( const Cube& rhs );
     ~Cube();
 
@@ -107,7 +137,8 @@ public:
     uint_fast32_t area() { return areaid_; }
 	bool addlink(std::shared_ptr<Cube> dest, uint_fast32_t attr);
     bool addlink(std::shared_ptr<Cube> dest);
-    std::string title() { return title_; }
+    std::string title();
+    std::wstring wtitle();
 
     // convert cube information into json
     // 1 - Event::TYPE_JSON_SIMPLE, for login/logout/arrive/leave event usage
@@ -194,7 +225,11 @@ public:
 		case Z_INC: cbloc.set(loc_.x(), loc_.y(), loc_.z() + 1); break;
 		case X_DEC: cbloc.set(loc_.x() - 1, loc_.y(), loc_.z()); break;
 		case Y_DEC: cbloc.set(loc_.x(), loc_.y() - 1, loc_.z()); break;
-		case Z_DEC: cbloc.set(loc_.x(), loc_.y(), loc_.z() - 1); break;
+        case Z_DEC: cbloc.set(loc_.x(), loc_.y(), loc_.z() - 1); break;
+        case X_INC_Y_INC: cbloc.set(loc_.x() + 1, loc_.y() + 1, loc_.z()); break;
+        case X_INC_Y_DEC: cbloc.set(loc_.x() + 1, loc_.y() - 1, loc_.z()); break;
+        case X_DEC_Y_INC: cbloc.set(loc_.x() - 1, loc_.y() + 1, loc_.z()); break;
+        case X_DEC_Y_DEC: cbloc.set(loc_.x() - 1, loc_.y() - 1, loc_.z()); break;
 		default:
 			return nullptr;
 		}
@@ -213,10 +248,12 @@ protected:
 private:
 	uint_fast32_t attr_ = 0xFFFFFFFF;
     CubePosition loc_;
-    std::string title_;
+    std::shared_ptr<octillion::StringData> title_ptr_;
 
 public:
-	uint_fast32_t exits_[6];
+	uint_fast32_t exits_[TOTAL_EXIT];
+    uint_fast32_t adjacent_cubes_[TOTAL_EXIT];
+    uint_fast32_t adjacent_exits_[TOTAL_EXIT][TOTAL_EXIT];
 
 	friend class WorldMap;
 
@@ -234,6 +271,7 @@ public:
     bool valid() { return valid_; }
     int id() { return id_; }
     std::string title() { return title_; }
+    std::wstring wtitle() { return wtitle_; }
     std::shared_ptr<Cube> cube(CubePosition loc);
 
     int offset_x() { return offset_x_; }
@@ -248,6 +286,7 @@ public:
         const std::map<CubePosition, std::shared_ptr<Cube>>& cubes);
 
 public:
+    octillion::StringTable string_table_;
     std::map<CubePosition, std::shared_ptr<Cube>> cubes_;
 
 public:
@@ -260,6 +299,7 @@ private:
     int id_;
     uint_fast32_t offset_x_, offset_y_, offset_z_;
     std::string title_;
+    std::wstring wtitle_;
 
 private:
 

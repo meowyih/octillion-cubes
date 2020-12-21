@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "world/cube.hpp"
+#include "world/mob.hpp"
 
 namespace octillion
 {
@@ -14,8 +15,8 @@ namespace octillion
 class octillion::WorldMap
 {
 private:
-	const std::string global_version_ = "0.01";
-	const std::string global_config_filename_ = "_global.json";
+    const std::string global_version_ = "0.01";
+    const std::string global_config_filename_ = "_global.json";
 
 private:
     const std::string tag_ = "WorldMap";
@@ -26,8 +27,8 @@ public:
     
 public:
     // read json and store map data into areas_ and cubes_
-    bool load_external_data_file( std::string directory );
-    
+    bool load_external_data_file( std::string directory, bool utf16 = false );
+
     // dump cubes_ and areas_ for debug purpose
     void dump();
 
@@ -43,16 +44,20 @@ private:
     bool initialized_;
 	std::string global_config_stamp_;
     
-private:
-    std::vector<std::shared_ptr<octillion::Area>> areas_;
+public:
+    // std::vector<std::shared_ptr<octillion::Area>> areas_;
+    std::map<int,std::shared_ptr<octillion::Area>> areas_;
     
     // shortcut to all cubes, it might cause cycle reference,
     // but it is not a problem since we will never have to release
     // the memory of cubes in the program lifecycle.
     std::map<CubePosition, std::shared_ptr<Cube>> cubes_;
     
-    //octillion::CubePosition reborn_;
+    // octillion::CubePosition reborn_;
     std::shared_ptr<Cube> reborn_;
+    
+    // mobs
+    std::map<int_fast32_t,octillion::Mob> mobs_;
         
     friend class World;
 };

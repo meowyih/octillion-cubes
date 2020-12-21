@@ -12,6 +12,21 @@ octillion::Event::~Event()
 {
 }
 
+// operator overriding
+octillion::Event& octillion::Event::operator=(const octillion::Event& event)
+{
+    if ( this != &event )
+    {
+        type_ = event.type_;
+        strparms_ = event.strparms_;
+        valid_ = event.valid_;
+        fd_ = event.fd_;
+        id_ = event.id_;
+    }
+    
+    return *this;
+}
+
 // external event from network with fd and raw data
 octillion::Event::Event( int fd, std::vector<uint8_t>& data )
 {

@@ -79,6 +79,9 @@ public:
     // empty event
     Event();
     
+    // operator overriding
+    Event& operator=(const Event& event);
+        
     Event( int type ) { type_ = type; }
     
     // external event from network with fd and raw data
@@ -90,13 +93,13 @@ public:
 
 public:
     int type_ = TYPE_UNKNOWN;
+    int type_last_ = TYPE_UNKNOWN; // event type received from player
     std::vector<std::string> strparms_;
     
     // for external event only
     bool valid_ = false;
     int  fd_ = 0;
     int  id_ = 0;
-    
-    std::weak_ptr<octillion::Player> player_;
 };
+
 #endif

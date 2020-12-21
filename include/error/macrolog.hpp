@@ -7,6 +7,11 @@
 #include <string>
 #include <vector>
 
+#ifdef WIN32
+#include <locale>
+#include <codecvt>
+#endif
+
 // usage:
 // LOG_E() << "error message" << std::endl;
 // LOG_W() << "warning message" << std::endl;
@@ -70,8 +75,15 @@ class octillion::MacroLog
             }
             
             os_ << std::endl;
+
+#ifdef WIN32
+            std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
+            std::wstring wstr = converter.from_bytes(os_.str());
+            OutputDebugStringW(wstr.c_str());
+#else
             std::cout << os_.str();
             std::cout.flush();
+#endif
         }
         
 

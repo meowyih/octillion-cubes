@@ -2,11 +2,8 @@
 #define OCTILLION_PLAYER_HEADER
 
 #include <string>
-#include <memory>
 
-#include "world/cube.hpp"
 #include "world/creature.hpp"
-
 
 namespace octillion
 {

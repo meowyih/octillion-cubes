@@ -92,24 +92,27 @@ octillion::Cube::Cube(const CubePosition& loc)
     loc_ = loc;
     areaid_ = 0;
     std::memset( exits_, 0, sizeof exits_);
+    std::memset(adjacent_cubes_, 0, sizeof adjacent_cubes_);
 }
 
-octillion::Cube::Cube(const CubePosition& loc, const std::string& title, int areaid, uint_fast32_t attr)
+octillion::Cube::Cube(const CubePosition& loc, std::shared_ptr<octillion::StringData> title_ptr, int areaid, uint_fast32_t attr)
 {
     loc_ = loc;
-    title_ = title;   
     areaid_ = areaid;
 	attr_ = attr;
+    title_ptr_ = title_ptr;
     std::memset( exits_, 0, sizeof exits_);
+    std::memset(adjacent_cubes_, 0, sizeof adjacent_cubes_);
 }
 
 octillion::Cube::Cube( const Cube& rhs )
 {
     loc_ = rhs.loc_;
-    title_ = rhs.title_;   
     areaid_ = rhs.areaid_;
-	attr_ = rhs.attr_;
+	attr_ = rhs.attr_; 
+    title_ptr_ = rhs.title_ptr_;
     std::memcpy( exits_, rhs.exits_, sizeof exits_);
+    std::memset(adjacent_cubes_, 0, sizeof adjacent_cubes_);
 }
 
 octillion::Cube::~Cube()
@@ -156,6 +159,22 @@ bool octillion::Cube::addlink(std::shared_ptr<Cube> dest)
 	return addlink(dest, EXIT_NORMAL);
 }
 
+std::string octillion::Cube::title()
+{
+    if (title_ptr_ == nullptr)
+        return std::string();
+
+    return title_ptr_->str_;
+}
+
+std::wstring octillion::Cube::wtitle()
+{
+    if (title_ptr_ == nullptr)
+        return std::wstring();
+
+    return title_ptr_->wstr_;
+}
+
 // parameter type
 // 1 - Event::TYPE_JSON_SIMPLE, for login/logout/arrive/leave event usage
 // 2 - Event::TYPE_JSON_DETAIL, for detail event usage
@@ -172,16 +191,19 @@ octillion::Area::Area( std::shared_ptr<JsonW> json )
 {
     std::map<std::string, CubePosition> markmap;
     std::shared_ptr<JsonW> jvalue;
+    std::shared_ptr<JsonW> jstable;
     
     // invalid json
     if ( json == NULL || json->valid() == false )
     {
+        LOG_D(tag_) << "Area init failed, json is not valid";
         return;
     }
     
     // valid area json is an object
     if ( json->type() != JsonW::OBJECT )
     {
+        LOG_D(tag_) << "Area init failed, top json is a object";
         return;
     }
 
@@ -189,6 +211,7 @@ octillion::Area::Area( std::shared_ptr<JsonW> json )
     jvalue = json->get( u8"id" );
     if (jvalue == NULL || jvalue->type() != JsonW::INTEGER )
     {
+        LOG_D(tag_) << "Area init failed, json has no id field";
         return;     
     }
     else
@@ -198,19 +221,39 @@ octillion::Area::Area( std::shared_ptr<JsonW> json )
     
     // area json must have title
     jvalue = json->get( u8"title" );
-    if (jvalue == NULL || jvalue->type() != JsonW::STRING )
+    if (jvalue != nullptr && jvalue->type() != JsonW::STRING)
     {
-        return;     
+        title_ = jvalue->str();
+        wtitle_ = jvalue->wstr();
+    }
+    else if (jvalue != nullptr && jvalue->type() != JsonW::INTEGER)
+    {
+        title_ = jvalue->str();
+        wtitle_ = jvalue->wstr();
     }
     else
     {
-        title_ = jvalue->str();
+        LOG_D(tag_) << "Area init failed, json has no title field";
+        return;
     }
+
+    // check string table
+    jstable = json->get(u8"strings");
+    if (jstable != nullptr)
+    {
+        bool success = string_table_.add(jstable);
+        if (!success)
+        {
+            LOG_W(tag_) << "Area " << title_ << " has no string table";
+        }
+    }
+
     
     // area json must have offset array
     jvalue = json->get( u8"offset" );
     if (jvalue == NULL || jvalue->type() != JsonW::ARRAY )
     {
+        LOG_D(tag_) << "Area init failed, json has no offset field";
         return;     
     }
     else
@@ -229,18 +272,21 @@ octillion::Area::Area( std::shared_ptr<JsonW> json )
     jvalue = json->get(u8"cubes");
     if (jvalue == NULL || jvalue->type() != JsonW::ARRAY )
     {
+        LOG_D(tag_) << "Area init failed, json has no cube field";
         return;
     }
     
     for ( size_t i = 0; i < jvalue->size(); i ++ )
     {
         bool ret;
+        std::shared_ptr<octillion::StringData> title_ptr;
         
         // "cubes" array must contains only object
         std::shared_ptr<JsonW> jcube = jvalue->get(i);
 
         if (jcube == NULL ) // not possible
         {
+            LOG_D(tag_) << "Area init failed, json has a cube that is not an object";
             return;
         }
         
@@ -249,6 +295,7 @@ octillion::Area::Area( std::shared_ptr<JsonW> json )
         ret = readloc(jcube->get( u8"loc" ), pos, offset_x_, offset_y_, offset_z_ );
         if ( ret == false )
         {
+            LOG_D(tag_) << "Area init failed, json has a cube with bad loc";
             return;
         }
         
@@ -261,9 +308,15 @@ octillion::Area::Area( std::shared_ptr<JsonW> json )
         
         // get title
         std::shared_ptr<JsonW> jtitle = jcube->get( u8"title" );
-        if ( jtitle == NULL || jtitle->type() != JsonW::STRING || jtitle->str().length() == 0 )
+        if (jtitle == nullptr || jtitle->type() != JsonW::INTEGER )
         {
+            LOG_D(tag_) << "Area init failed, json has a cube with bad/no title";
             return;
+        }
+        else
+        {
+            int strid = (int)(jtitle->integer());
+            title_ptr = string_table_.find(strid);
         }
 
         // get mark if exist (optional)        
@@ -298,8 +351,27 @@ octillion::Area::Area( std::shared_ptr<JsonW> json )
 		}
                 
         // create cube and store in cubes_
-        std::shared_ptr<Cube> cube = std::make_shared<Cube>( pos, jtitle->str(), id_, attr);
+        std::shared_ptr<Cube> cube = std::make_shared<Cube>( pos, title_ptr, id_, attr);
         cubes_[pos] = cube;
+
+        // read exits
+        std::shared_ptr<JsonW> jexits = jcube->get(u8"exits");
+        if (jexits != nullptr && jexits->type() == JsonW::STRING)
+        {
+            std::string exits = jexits->str();
+            if (exits.find('n') != std::string::npos)
+                cube->exits_[octillion::Cube::Y_INC] = octillion::Cube::EXIT_NORMAL;
+            if (exits.find('e') != std::string::npos)
+                cube->exits_[octillion::Cube::X_INC] = octillion::Cube::EXIT_NORMAL;
+            if (exits.find('s') != std::string::npos)
+                cube->exits_[octillion::Cube::Y_DEC] = octillion::Cube::EXIT_NORMAL;
+            if (exits.find('w') != std::string::npos)
+                cube->exits_[octillion::Cube::X_DEC] = octillion::Cube::EXIT_NORMAL;
+            if (exits.find('u') != std::string::npos)
+                cube->exits_[octillion::Cube::Z_INC] = octillion::Cube::EXIT_NORMAL;
+            if (exits.find('d') != std::string::npos)
+                cube->exits_[octillion::Cube::Z_DEC] = octillion::Cube::EXIT_NORMAL;
+        }
     }
     
     // links is optional in area, although it does not make sense to create area without it
@@ -314,6 +386,7 @@ octillion::Area::Area( std::shared_ptr<JsonW> json )
 
 			if (jlink == NULL || jlink->type() != JsonW::OBJECT)
 			{
+                LOG_D(tag_) << "Area init failed, json has a link which is not an object";
 				return;
 			}
 
@@ -333,6 +406,7 @@ octillion::Area::Area( std::shared_ptr<JsonW> json )
 			jlinkvalue = jlink->get(u8"from");
 			if (jlinkvalue == NULL)
 			{
+                LOG_E(tag_) << "Area init failed, json has a link with bad from field";
 				return;
 			}
 			else if (jlinkvalue->type() == JsonW::STRING)
@@ -341,6 +415,7 @@ octillion::Area::Area( std::shared_ptr<JsonW> json )
 				auto it = markmap.find(str);
 				if (it == markmap.end())
 				{
+                    LOG_E(tag_) << "Area init failed, json has a link with bad type field";
 					return;
 				}
 				else
@@ -353,11 +428,13 @@ octillion::Area::Area( std::shared_ptr<JsonW> json )
 				ret = readloc(jlinkvalue, from, offset_x_, offset_y_, offset_z_);
 				if (ret == false)
 				{
+                    LOG_E(tag_) << "Area init failed, json has a link with bad array field";
 					return;
 				}
 			}
 			else
 			{
+                LOG_E(tag_) << "Area init failed, json has a link with unknwon represenation";
 				return;
 			}
 
@@ -365,6 +442,7 @@ octillion::Area::Area( std::shared_ptr<JsonW> json )
 			jlinkvalue = jlink->get(u8"to");
 			if (jlinkvalue == NULL)
 			{
+                LOG_E(tag_) << "Area init failed, json has a link with bad to field";
 				return;
 			}
 			else if (jlinkvalue->type() == JsonW::STRING)
@@ -373,6 +451,7 @@ octillion::Area::Area( std::shared_ptr<JsonW> json )
 				auto it = markmap.find(str);
 				if (it == markmap.end())
 				{
+                    LOG_E(tag_) << "Area init failed, json has a link-to field with undefined mark";
 					return;
 				}
 				else
@@ -385,22 +464,26 @@ octillion::Area::Area( std::shared_ptr<JsonW> json )
 				ret = readloc(jlinkvalue, to, offset_x_, offset_y_, offset_z_);
 				if (ret == false)
 				{
+                    LOG_E(tag_) << "Area init failed, json has a link-to field with loc array";
 					return;
 				}
 			}
 			else
 			{
+                LOG_E(tag_) << "Area init failed, json has a link-to field with unknwon representation";
 				return;
 			}
 
 			// check if from and to both exists
 			if (cubes_.find(from) == cubes_.end())
 			{
+                LOG_E(tag_) << "Area init failed, json has a from field has no cube";
 				return;
 			}
 
 			if (cubes_.find(to) == cubes_.end())
 			{
+                LOG_E(tag_) << "Area init failed, json has a to field has no cube";
 				return;
 			}
 
