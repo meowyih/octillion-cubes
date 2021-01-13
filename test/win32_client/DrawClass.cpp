@@ -7,6 +7,9 @@
 #include <memory>
 #include <vector>
 
+#include <cstdlib> /* rand */
+#include <ctime>   /* random seed */
+
 #include "error/ocerror.hpp"
 #include "error/macrolog.hpp"
 
@@ -22,9 +25,10 @@ DrawClass::DrawClass()
     map_ = std::make_shared<octillion::WorldMap>();
     bool result = map_->load_external_data_file("./data/");
     degree_x_ = degree_y_ = degree_z_ = 0;
-
-    cube_center_ = map_->reborn_;
     scale_ = 5;
+
+    // random seed
+    srand((unsigned int)time(NULL));
 
     // load font
     HANDLE hMyFont = INVALID_HANDLE_VALUE; // Here, we will (hopefully) get our font handle
@@ -40,6 +44,9 @@ DrawClass::DrawClass()
             hMyFont = AddFontMemResourceEx(FntData, len, nullptr, &nFonts); // Fake install font!
         }
     }
+
+    // login after all the inititalization
+    setCenterCube(map_->reborn_);
 }
 
 DrawClass::~DrawClass()
@@ -50,10 +57,13 @@ DrawClass::~DrawClass()
 BOOL DrawClass::OnPaint(HWND hwnd, HDC hdc, BOOL recalc)
 {    
     Matrix<double>  scale_matrix(4, 4);
-    Matrix<double>  translate_matrix(4, 4), translate_matrix2(4, 4);
+    Matrix<double>  translate_matrix(4, 4);
+    Matrix<double>  translate_center_matrix(4, 4);
     Matrix<double>  rotate_matrixX(4, 4);
     Matrix<double>  rotate_matrixY(4, 4);
     Matrix<double>  rotate_matrixZ(4, 4);
+
+    Matrix<double> world_m1(4, 4), world_m2(4, 4), world_m3(4, 4);
 
     // recalculate the window size and allocate a new buffer
     if (recalc)
@@ -106,8 +116,10 @@ BOOL DrawClass::OnPaint(HWND hwnd, HDC hdc, BOOL recalc)
             Config::get_instance().console_window_height());
 
         maze_bitmap_.set(
-            width(), height(), map_
-        );
+            Config::get_instance().map_window_width(),
+            Config::get_instance().map_window_height(), map_
+            // width(), height(), map_
+        );        
     }
 
     // directly draw on the buffer
@@ -119,37 +131,31 @@ BOOL DrawClass::OnPaint(HWND hwnd, HDC hdc, BOOL recalc)
         }
     }
 
-    // draw a maximam rectangle for test 
-    for (int i = 0; i < width(); i++)
-    {
-        setColor(i, 0, 0xFF0000);
-        setColor(i, height() - 1, 0xFF0000);
-    }
-
-    for (int i = 0; i < height(); i++)
-    {
-        setColor(0, i, 0xFF0000);
-        setColor(width() - 1, i, 0xFF0000);
-    }
-
     // draw cube
     set_rotateX(rotate_matrixX, (degree_x_ % 360) * 2 * M_PI / 360);
     set_rotateY(rotate_matrixY, (degree_y_ % 360) * 2 * M_PI / 360);
     set_rotateZ(rotate_matrixZ, (degree_z_ % 360) * 2 * M_PI / 360);
     set_scale(scale_matrix, scale_);
     set_translate(translate_matrix, 
-        -1 * maze_bitmap_.cube(cube_center_->loc())->p[0].x_,
-        -1 * maze_bitmap_.cube(cube_center_->loc())->p[0].y_,
-        -1 * maze_bitmap_.cube(cube_center_->loc())->p[0].z_);
-    set_translate(translate_matrix2, width_ / 2 - 5*scale_, height_ / 2, 0);
+        (double)-1 * maze_bitmap_.cube(cube_center_->loc())->p[0].x_,
+        (double)-1 * maze_bitmap_.cube(cube_center_->loc())->p[0].y_,
+        (double)-1 * maze_bitmap_.cube(cube_center_->loc())->p[0].z_);
+    set_translate(translate_center_matrix,
+        (double)width() / 2, (double)height() / 2, (double)0);
 
     // final matrix, be careful of the order
     Matrix<double> world_matrix =
         translate_matrix *
+        scale_matrix *
         rotate_matrixX *
         rotate_matrixY * rotate_matrixZ *
-        scale_matrix *
-        translate_matrix2;
+        translate_center_matrix;
+
+    world_m1 = translate_matrix * scale_matrix;
+    world_m2 = rotate_matrixX *
+        rotate_matrixY * rotate_matrixZ *
+        translate_center_matrix;
+    world_m3 = world_matrix;
 
     // initialize the waiting animation
     if (animation_blocking_.size() > 0
@@ -177,6 +183,7 @@ BOOL DrawClass::OnPaint(HWND hwnd, HDC hdc, BOOL recalc)
         }
         else if (animation_blocking_.front().type_ == TaskAnimation::ROTATE)
         {
+            animation_blocking_.front().start_scale_ = scale_;
             animation_blocking_.front().start_degree_x_ = degree_x_;
             animation_blocking_.front().start_degree_y_ = degree_y_;
         }
@@ -185,6 +192,7 @@ BOOL DrawClass::OnPaint(HWND hwnd, HDC hdc, BOOL recalc)
     if (animation_blocking_.size() > 0 
         && animation_blocking_.front().type_ == TaskAnimation::ROTATE )
     {
+        Matrix<double>  scale_ani_matrix(4, 4);
         std::chrono::milliseconds now = 
             std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::system_clock::now().time_since_epoch());
@@ -194,6 +202,7 @@ BOOL DrawClass::OnPaint(HWND hwnd, HDC hdc, BOOL recalc)
         if (duration.count() >= animation_blocking_.front().duration_)
         {
             // re-calculate the world matrix
+            set_scale(scale_ani_matrix, animation_blocking_.front().dest_scale_);
             degree_x_ = animation_blocking_.front().dest_degree_x_;
             degree_y_ = animation_blocking_.front().dest_degree_y_;
 
@@ -201,10 +210,18 @@ BOOL DrawClass::OnPaint(HWND hwnd, HDC hdc, BOOL recalc)
             set_rotateY(rotate_matrixY, (degree_y_ % 360) * 2 * M_PI / 360);
             world_matrix =
                 translate_matrix *
+                scale_ani_matrix *
                 rotate_matrixX *
                 rotate_matrixY * rotate_matrixZ *
-                scale_matrix *
-                translate_matrix2;
+                translate_center_matrix;
+
+            world_m1 = translate_matrix * scale_ani_matrix;
+            world_m2 = rotate_matrixX *
+                rotate_matrixY * rotate_matrixZ *
+                translate_center_matrix;
+            world_m3 = world_matrix;
+
+            scale_ = animation_blocking_.front().dest_scale_;
             animation_blocking_.pop_front();
         }
         else
@@ -212,16 +229,25 @@ BOOL DrawClass::OnPaint(HWND hwnd, HDC hdc, BOOL recalc)
             double num = duration.count() * 1.0;
             double dem = animation_blocking_.front().duration_ * 1.0;
             double ratio = num  / dem;
+            double scale = animation_blocking_.front().start_scale_ + 
+                ( animation_blocking_.front().dest_scale_ - animation_blocking_.front().start_scale_ ) * ratio;
+            set_scale(scale_ani_matrix, scale);
             degree_x_ = animation_blocking_.front().start_degree_x_ + (int)(ratio * ( animation_blocking_.front().dest_degree_x_ - animation_blocking_.front().start_degree_x_));
             degree_y_ = animation_blocking_.front().start_degree_y_ + (int)(ratio * (animation_blocking_.front().dest_degree_y_ - animation_blocking_.front().start_degree_y_));
             set_rotateX(rotate_matrixX, (degree_x_ % 360) * 2 * M_PI / 360);
             set_rotateY(rotate_matrixY, (degree_y_ % 360) * 2 * M_PI / 360);
             world_matrix =
                 translate_matrix *
+                scale_ani_matrix *
                 rotate_matrixX *
                 rotate_matrixY * rotate_matrixZ *
-                scale_matrix *
-                translate_matrix2;
+                translate_center_matrix;
+
+            world_m1 = translate_matrix * scale_ani_matrix;
+            world_m2 = rotate_matrixX *
+                rotate_matrixY * rotate_matrixZ *
+                translate_center_matrix;
+            world_m3 = world_matrix;
         }
     }
     else if (animation_blocking_.size() > 0
@@ -235,14 +261,17 @@ BOOL DrawClass::OnPaint(HWND hwnd, HDC hdc, BOOL recalc)
 
         if (duration.count() >= animation_blocking_.front().duration_)
         {
+            std::shared_ptr<octillion::Cube> dest = animation_blocking_.front().cube_dest_;
             Matrix<double>  trans_ani(4, 4);
-            cube_center_ = animation_blocking_.front().cube_dest_;
             set_translate(trans_ani,
-                animation_blocking_.front().interval_x_,
-                animation_blocking_.front().interval_y_,
-                0);
+                (double)animation_blocking_.front().interval_x_,
+                (double)animation_blocking_.front().interval_y_,
+                (double)0);
             world_matrix = world_matrix * trans_ani;
+            world_m2 = world_m2 * trans_ani;
+            world_m3 = world_matrix;
             animation_blocking_.pop_front();
+            setCenterCube( dest );
         }
         else
         {
@@ -253,28 +282,34 @@ BOOL DrawClass::OnPaint(HWND hwnd, HDC hdc, BOOL recalc)
             double ratio = num / dem;
 
             set_translate(trans_ani,
-                animation_blocking_.front().interval_x_ * ratio,
-                animation_blocking_.front().interval_y_ * ratio,
-                0);
+                (double)animation_blocking_.front().interval_x_ * ratio,
+                (double)animation_blocking_.front().interval_y_ * ratio,
+                (double)0);
             world_matrix = world_matrix * trans_ani;
+            world_m2 = world_m2 * trans_ani;
+            world_m3 = world_matrix;
         }
     }
 
     // draw bitmap
     if (degree_x_ == degree_y_ == degree_z_ == 0)
     {
-        draw_map(hdc, cube_center_->loc(), world_matrix, MazeBitmapCreator::RENDER_FLAG_PLAIN);
+        // TODO: draw plain map with text symbol
+        draw_map(hdc, cube_center_->loc(), world_m1, world_m2, world_m3, MazeBitmapCreator::RENDER_FLAG_PLAIN);
     }
     else
     {
+        // draw basic map without text symbol
         draw_map(hdc, cube_center_->loc(), world_matrix, MazeBitmapCreator::RENDER_FLAG_ALL);
     }
 
     // draw title bar
-    draw_title( hdc );
+    // draw_title( hdc );
 
     // add text
     draw_console(hdc);
+
+    draw_interactive(hdc);
 
     // update the screen with buffer
     BITMAPINFOHEADER bih;
@@ -296,6 +331,9 @@ BOOL DrawClass::OnPaint(HWND hwnd, HDC hdc, BOOL recalc)
         0, 0, 0, height_,
         buffer_->data(), &bi, DIB_RGB_COLORS);
 
+    // refresh script
+    refresh_script();
+
     return TRUE;
 }
 
@@ -309,7 +347,19 @@ BOOL DrawClass::keypress(int keycode)
     // all blocking animation need to be done before accept another input
     if (animation_blocking_.size() > 0)
     {
+        LOG_D("DrawClass") << "unhandled keycode 0x55 nimation_blocking_.size()::" << animation_blocking_.size();
         return FALSE;
+    }
+
+    if (b_roller_.is_rolling())
+    {
+        LOG_D("DrawClass") << "unhandled keycode due to text is still rolling";
+        return FALSE;
+    }
+
+    if (keycode == 0x55)
+    {
+        LOG_D("DrawClass") << "keycode 0x55 exitup:" << cube_center_->exits_[octillion::Cube::Z_INC];
     }
 
     if (keycode == VK_RIGHT && cube_center_->exits_[octillion::Cube::X_INC] > 0 )
@@ -393,15 +443,10 @@ BOOL DrawClass::keypress(int keycode)
         return TRUE;
     }
 
-    // add text into console
-    text_bitmap_.addLine(cube_dest->wtitle());
-
     // add animation
     task.type_ = TaskAnimation::MOVE_2D;
     task.duration_ = 200;    
     task.cube_dest_ = cube_dest;
-
-    LOG_D("DrawClass") << "keypress cube_dest:" << task.cube_dest_->loc().str();
 
     // add animation into list
     animation_blocking_.push_back(task);
@@ -412,19 +457,43 @@ BOOL DrawClass::keypress(int keycode)
 
         // add rotate animation at begin
         task_rotate.type_ = TaskAnimation::ROTATE;
-        task_rotate.dest_degree_x_ = -100;
+        task_rotate.dest_degree_x_ = -80;
         task_rotate.dest_degree_y_ = 20;
-        task_rotate.duration_ = 300;
+        task_rotate.duration_ = 2000;
+        task_rotate.start_scale_ = 0; // unknown until runtime
+        task_rotate.dest_scale_ = 15;
         animation_blocking_.insert(animation_blocking_.begin(), task_rotate);
         
         task_reset.type_ = TaskAnimation::ROTATE;
         task_rotate.dest_degree_x_ = 0;
         task_rotate.dest_degree_y_ = 0;
-        task_rotate.duration_ = 200;
+        task_rotate.duration_ = 1000;
+        task_rotate.start_scale_ = 0; // unknown until runtime
+        task_rotate.dest_scale_ = 5;
         animation_blocking_.push_back(task_rotate);
     }
 
     return isConsumed;
+}
+
+BOOL DrawClass::point(int x, int y)
+{
+    std::shared_ptr<octillion::Interactive> interactive;
+    interactive = list_bitmap_.point(
+        x - Config::get_instance().interactive_window_pos_x(),
+        y - Config::get_instance().interactive_window_pos_y()
+    );
+
+    if (interactive == nullptr)
+    {
+        LOG_D("DrawClass") << "interactive is nullptr";
+    }
+    else
+    {
+        LOG_D("DrawClass") << "click " << interactive->title()->str_.at(0);
+    }
+
+    return TRUE;
 }
 
 inline LONG DrawClass::width()
@@ -479,8 +548,136 @@ inline LONG DrawClass::realHeight(LONG height)
     return height + top_border_ + bottom_border_;
 }
 
+inline void DrawClass::refresh_script()
+{
+    // read and handle the script
+    size_t total_script = map_->areas_.at(cube_center_->area())->scripts_.size();
+    for (size_t i = 0; i < total_script; i++)
+    {
+        std::shared_ptr<std::vector<octillion::Action>> p_acts =
+            map_->areas_.at(cube_center_->area())->scripts_.at(i).handle(
+                storage_, false
+            );
+
+        if (p_acts != nullptr)
+        {
+            handle_action(p_acts);
+        }
+        else
+        {
+            // TODO: display some information
+        }
+    }
+}
+
+inline void DrawClass::setCenterCube(std::shared_ptr<octillion::Cube> dest)
+{
+    std::shared_ptr<octillion::StringData> exit_desc = nullptr;
+    std::shared_ptr<octillion::Cube> cube_previous = nullptr;
+    cube_center_ = dest;
+
+    // get previous location
+    if (move_history_.size() > 0)
+    {
+        cube_previous = move_history_.front();
+    }
+
+    // increase move count for that area
+    if (cube_previous != nullptr)
+    {
+        storage_.move_count_inc(dest->area());
+    }
+    storage_.areaid_ = dest->area();
+    storage_.loc_ = dest->loc();
+
+    // get cube exit desc
+    if (cube_previous != nullptr)
+    {
+        int dir = octillion::Cube::dir(cube_previous, dest);
+        exit_desc = cube_previous->desc_exits_[dir];
+        add_console(exit_desc);
+    }
+
+    // add current loc into move history
+    move_history_.push_front(cube_center_);
+    if (move_history_.size() > 100)
+    {
+        move_history_.pop_back();
+    }
+
+    // read and handle the area script
+    size_t total_script = map_->areas_.at(cube_center_->area())->scripts_.size();
+    for (size_t i = 0; i < total_script; i++)
+    {
+        std::shared_ptr<std::vector<octillion::Action>> p_acts = 
+        map_->areas_.at(cube_center_->area())->scripts_.at(i).handle(
+            storage_, true
+        );
+
+        if (p_acts!= nullptr)        
+        {
+            handle_action( p_acts );
+        }
+        else
+        {
+            // TODO: display some information
+        }
+    }
+
+    // check if we need to move more
+    if (cube_previous != nullptr && cube_center_->exits_[octillion::Cube::Z_INC] != 0)
+    {
+        std::shared_ptr<octillion::Cube> cube_up = cube_center_->find(map_->cubes_, octillion::Cube::Z_INC);
+        if (!(cube_up->loc() == cube_previous->loc()))
+        {
+            // move up
+            keypress(0x55);// 'u'
+        }
+    }
+
+    if (cube_previous != nullptr && cube_center_->exits_[octillion::Cube::Z_DEC] != 0)
+    {
+        std::shared_ptr<octillion::Cube> cube_down = cube_center_->find(map_->cubes_, octillion::Cube::Z_DEC);
+        if (!(cube_down->loc() == cube_previous->loc()))
+        {
+            // move up
+            keypress(0x44);// 'd'
+        }
+    }
+}
+
+inline void DrawClass::handle_action(std::shared_ptr<std::vector<octillion::Action>> p_acts)
+{
+    for (auto it = p_acts->begin(); it != p_acts->end(); it++)
+    {
+        int type = it->action_type_;
+        int var = it->variable_type_;
+        
+        if (type == octillion::Action::ACTION_TYPE_TEXT && var == octillion::Action::VARIABLE_TYPE_TEXT)
+        {
+            int area_id = cube_center_->area();
+            int string_id = it->i_rhs_;
+
+            std::shared_ptr<octillion::StringData> it = map_->areas_.at(area_id)->string_table_.find( string_id );
+
+            if (it == nullptr)
+            {
+                LOG_D("DrawClass") << "string id: " << string_id << " does not valid in area id " << area_id;
+                return;
+            }
+
+            add_console(it);
+        }
+        else if (type == octillion::Action::ACTION_TYPE_RESET_TIMER)
+        {
+            storage_.reset_timer();
+        }
+    }
+}
+
 void DrawClass::draw_title(HDC hdc)
 {
+#if 0
     int area_id;
     int x, y;
     int w, h;
@@ -495,7 +692,7 @@ void DrawClass::draw_title(HDC hdc)
     area_id = cube_center_->area();
     wstr = map_->areas_.at(area_id)->wtitle();
     tc.reset();
-    tc.addLine(wstr);
+    tc.addLine(wstr, false);
     tc.getBitmapFixHeight(hdc, w, h, cubename);
 
     x_margin = (Config::get_instance().area_name_width() - w) / 2;
@@ -520,7 +717,7 @@ void DrawClass::draw_title(HDC hdc)
     h = Config::get_instance().title_text_height();
     wstr = cube_center_->wtitle();
     tc.reset();
-    tc.addLine(wstr);
+    tc.addLine(wstr, false);
     tc.getBitmapFixHeight(hdc, w, h, cubename);
     x_margin = 0;
     y_margin = (Config::get_instance().title_height() - h) / 2;
@@ -538,19 +735,71 @@ void DrawClass::draw_title(HDC hdc)
             setColor(j + x, i + y, color);
         }
     }
+#endif
+}
+
+void DrawClass::add_console(std::shared_ptr<octillion::StringData>& strdata)
+{
+    if (strdata == nullptr || (*strdata).wstr_.size() == 0)
+        return;
+
+    if ((*strdata).wstr_.size() == 1)
+    {
+        text_bitmap_rev_.addLine((*strdata).id_, (*strdata).wstr_.at(0), true, true);
+    }
+    else if ((*strdata).select_ == octillion::StringTable::SELECT_RANDOMLY)
+    {
+        int idx = rand() % (*strdata).wstr_.size();
+        text_bitmap_rev_.addLine((*strdata).id_, (*strdata).wstr_.at(idx), true, true);
+    }
+    else if ((*strdata).select_ == octillion::StringTable::SELECT_ORDERLY)
+    {
+        int idx = (*strdata).last_index_ % (*strdata).wstr_.size();
+        text_bitmap_rev_.addLine((*strdata).id_, (*strdata).wstr_.at(idx), true, true);
+        (*strdata).last_index_++;
+    }
+    else if ((*strdata).select_ == octillion::StringTable::SELECT_ALL)
+    {
+        LOG_D("DrawClass") << "sting data size: " << (*strdata).wstr_.size();
+
+        for (auto itstr = (*strdata).wstr_.begin(); itstr != (*strdata).wstr_.end(); itstr++)
+        {
+            if ( itstr == (*strdata).wstr_.begin() )
+                text_bitmap_rev_.addLine((*strdata).id_, *itstr, true, false);
+            else if ( (itstr+1) == (*strdata).wstr_.end() )
+                text_bitmap_rev_.addLine((*strdata).id_, *itstr, false, true);
+            else
+                text_bitmap_rev_.addLine((*strdata).id_, *itstr, false, false);
+        }
+    }
+    else
+    {
+        LOG_E("DrawClass") << "unsupport string data select type: " << (*strdata).select_;
+    }
 }
 
 void DrawClass::draw_console(HDC hdc)
 {
     std::vector<BYTE> out;
 
+    int strid = 0;
     int w = b_roller_.width();
     int h = Config::get_instance().console_text_height();
 
-    while (! text_bitmap_.isEmpty())
+    text_bitmap_rev_.render(hdc, w, h);
+
+    while (! text_bitmap_rev_.isEmpty())
     {
-        text_bitmap_.getBitmapFixHeight(hdc, w, h, out);
-        b_roller_.add(out, w, h, BitmapRoller::CENTER);
+        int w_bitmap = w, h_bitmap = h;
+        bool ret = text_bitmap_rev_.getBitmap( w_bitmap, h_bitmap, strid, out);
+
+        if (ret == false || out.size() == 0)
+        {
+            LOG_E("DrawClass") << "text_bitmap_rev_.getBitmap ret false or size is 0, size:" << out.size();
+            break;
+        }
+
+        b_roller_.add(out, w_bitmap, h_bitmap, strid, BitmapRoller::CENTER);
     }
 
     b_roller_.render(out);
@@ -574,6 +823,9 @@ void DrawClass::draw_console(HDC hdc)
 
 void DrawClass::draw_map(HDC hdc, octillion::CubePosition loc, Matrix<double> matrix, int flag)
 {
+    // note: draw from left-top
+    int margin_top;
+
     std::shared_ptr<std::vector<BYTE>> bitmap =
         maze_bitmap_.render(cube_center_->loc(), matrix, 10, flag);
 
@@ -584,12 +836,82 @@ void DrawClass::draw_map(HDC hdc, octillion::CubePosition loc, Matrix<double> ma
     int lines = maze_bitmap_.height() > height() ?
         height() : maze_bitmap_.height();
 
+    margin_top = height() - lines;
+
     for (int i = 0; i < lines; i++)
     {
-        int anchor1 = i * width() * Config::get_instance().pixel_size();
+        int anchor1 = (i + margin_top) * width() * Config::get_instance().pixel_size();
         int anchor2 = i * maze_bitmap_.width() * Config::get_instance().pixel_size();
         BYTE* canvas_px = buffer_->data() + anchor1;
         BYTE* bitmap_px = bitmap->data() + anchor2;
         memcpy(canvas_px, bitmap_px, bitmap_line_size);
+    }
+}
+
+void DrawClass::draw_map(HDC hdc, octillion::CubePosition loc, Matrix<double> m1, Matrix<double> m2, Matrix<double> m3, int flag)
+{
+    // note: draw from left-top
+    int margin_top;
+
+    std::shared_ptr<std::vector<BYTE>> bitmap =
+        maze_bitmap_.render(cube_center_->loc(), m1, m2, m3, 10, flag, hdc);
+
+    int bitmap_line_size = maze_bitmap_.width() > width() ?
+        width() * Config::get_instance().pixel_size() :
+        maze_bitmap_.width() * Config::get_instance().pixel_size();
+
+    int lines = maze_bitmap_.height() > height() ?
+        height() : maze_bitmap_.height();
+
+    margin_top = height() - lines;
+
+    for (int i = 0; i < lines; i++)
+    {
+        int anchor1 = (i + margin_top) * width() * Config::get_instance().pixel_size();
+        int anchor2 = i * maze_bitmap_.width() * Config::get_instance().pixel_size();
+        BYTE* canvas_px = buffer_->data() + anchor1;
+        BYTE* bitmap_px = bitmap->data() + anchor2;
+        memcpy(canvas_px, bitmap_px, bitmap_line_size);
+    }
+}
+
+void DrawClass::draw_interactive(HDC hdc)
+{
+    int bitmap_size = Config::get_instance().interactive_window_width() *
+        Config::get_instance().interactive_window_height() *
+        Config::get_instance().pixel_size();
+
+    int areaid = (int)cube_center_->area();
+    std::shared_ptr<octillion::Area> area = map_->areas_.at(areaid);
+    std::shared_ptr<std::vector<BYTE>> out;
+    std::vector<std::shared_ptr<octillion::Interactive>> interactives;
+
+    for (auto it = area->interactives_.begin(); it != area->interactives_.end(); it++)
+    {
+        if ((*it)->loc() == cube_center_->loc())
+        {
+            interactives.push_back(*it);
+        }
+    }
+
+    list_bitmap_.set(
+        Config::get_instance().interactive_window_width(),
+        Config::get_instance().interactive_window_height(),
+        interactives );
+
+    out = list_bitmap_.render(hdc);
+
+    if (out == nullptr || out->size() != bitmap_size)
+    {
+        LOG_E("DrawClass") << "list_bitmap_ render a bad bitmap";
+        return;
+    }
+
+    for (int i = 0; i < Config::get_instance().interactive_window_height(); i++)
+    {
+        BYTE* anchor1 = buffer_->data() + i * width_ * Config::get_instance().pixel_size();
+        BYTE* anchor2 = out->data() + i * Config::get_instance().interactive_window_width() * Config::get_instance().pixel_size();
+
+        memcpy(anchor1, anchor2, Config::get_instance().interactive_window_width() * Config::get_instance().pixel_size());
     }
 }

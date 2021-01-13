@@ -1,0 +1,29 @@
+{   
+    "map":
+    {
+        "width%": 1.0,
+        "height%": 0.75
+    },
+    
+    "console":
+    {
+        "width%": 0.5,
+        "height%": 0.6,
+        "text height%": 0.04,
+        "font-default": "源泉圓體 B",
+        "font-1": "源泉圓體 B",
+        "font-2": "Microsoft YaHei UI"
+    },
+    
+    "font-symbol": "WWFreebie",
+    
+    "interactive":
+    {
+        "width%": 0.25,
+        "height%": 0.6,
+        "text height%": 0.05,
+        "font-default": "源泉圓體 B",
+        "font-1": "源泉圓體 B",
+        "font-2": "Microsoft YaHei UI"
+    }
+}

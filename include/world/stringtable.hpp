@@ -1,6 +1,7 @@
 #ifndef OCTILLION_STRINGTABLE_HEADER
 #define OCTILLION_STRINGTABLE_HEADER
 
+#include <vector>
 #include <unordered_set>
 #include <unordered_map>
 #include <string>
@@ -17,14 +18,19 @@ namespace octillion
 class octillion::StringData
 {
 public:
-    int id_;
-    std::string str_;
-    std::wstring wstr_;
-    std::unordered_set<int> attrs_; 
+    int id_ = 0;
+    std::vector<std::string> str_;
+    std::vector<std::wstring> wstr_;
+    int select_ = 0;
+    int last_index_ = 0;
 };
 
 class octillion::StringTable
 {
+public:
+    const static int SELECT_ALL = 0; // default value, no need to add
+    const static int SELECT_RANDOMLY = 1;
+    const static int SELECT_ORDERLY = 2;
 private:
     const std::string tag_ = "WorldMap";
 

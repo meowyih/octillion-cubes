@@ -1,31 +1,35 @@
 {
 	"stamp":"201807190001",
 	
-    "links":
+    "links_old":
     [
         { 
             "type": "2way", 
-            "from": { "area": 1, "cube":"central" },
-            "to": { "area": 2, "cube":"under00"},			
+            "from": { "cube":[1055,1052,1000] },
+            "to": { "cube":[1055,1052,1001]}		
+        },
+        {
+            "type": "2way", 
+            "from": { "cube":[54,53,0], "offset":[1000,1000,1001] },
+            "to": { "cube":[54,53,0], "offset":[1000,1000,1002] }
+        },
+        {
+            "type": "2way", 
+            "from": { "cube":[55,53,0], "offset":[1000,1000,1001] },
+            "to": { "cube":[55,53,0], "offset":[1000,1000,1002] }
+        },
+        {
+            "type": "2way", 
+            "from": { "cube":[56,53,0], "offset":[1000,1000,1001] },
+            "to": { "cube":[56,53,0], "offset":[1000,1000,1002] }
         }
     ],
-	
-	"mobs":
-	[
-		{
-			"race": 1,
-			"subrace": 0,
-			"level": 1,
-			"short": "test mob",
-			"long": "a floating test mob"
-		}
-	],
-	
-	"reborn": [100000, 100000, 100000],
+    
+    "reborn tmp": [0, 0, 0],
+	"reborn": [1010, 1000, 1000],
 	
 	"area":
 	[
-		{"id":1,"stamp":"201807190001","file":"data/id_1_control_area.json"},
-		{"id":2,"stamp":"201807190001","file":"data/id_2_control_area_underground.json"}
+        {"id":10,"stamp":"202012170001","file":"id_10_reincarnation_chamber.json"},
 	]
 }

@@ -4,31 +4,16 @@
 #include <cstdint>
 #include <cmath>
 #include <vector>
-#include <vector>
 #include "3d/matrix.hpp"
 #include "world/cube.hpp"
 
-class Point3d
-{
-public:
-    Point3d() : x_(0), y_(0), z_(0) {}
-    Point3d(int_fast32_t x, int_fast32_t y, int_fast32_t z) : x_(x), y_(y), z_(z) {}
-    void set(int_fast32_t x, int_fast32_t y, int_fast32_t z)
-    {
-        x_ = x;
-        y_ = y;
-        z_ = z;
-    }
-    int_fast32_t x_, y_, z_;
-
-    bool equal(const Point3d& rhs)
-    {
-        return (x_ == rhs.x_ && y_ == rhs.y_ && z_ == rhs.z_);
-    }
-};
+#include "Point3d.hpp"
 
 class Cube3d
 {
+private:
+    const std::string tag_ = "Cube3d";
+
 public:
     const static int number_of_point = 38;
 
@@ -123,15 +108,16 @@ public:
     std::shared_ptr<octillion::Cube> cube_ = nullptr;
 
 public:
-    Point3d render_pt(Matrix<double> matrix, int idx)
+    template <class T>
+    Point3d render_pt(Matrix<T> matrix, int idx)
     {
         if (idx >= number_of_point || idx < 0)
         {
             return Point3d();
         }
 
-        Matrix<double> pt((double)p[idx].x_, (double)p[idx].y_, (double)p[idx].z_);
-        Matrix<double> pt_new = pt * matrix;
+        Matrix<T> pt((T)p[idx].x_, (T)p[idx].y_, (T)p[idx].z_);
+        Matrix<T> pt_new = pt * matrix;
         
         return Point3d((int_fast32_t)pt_new.at(0), (int_fast32_t)pt_new.at(1), (int_fast32_t)pt_new.at(2));
     }
@@ -173,6 +159,12 @@ public:
         points.insert(points.end(), out.begin(), out.end());
     }
 
+    // m3 = m1 * m2, just reduce the computing time
+    // m1 is 1st step, normally translate and scale
+    // m2 is 2nd step, normally rotate and translate. scaling should be in it
+    // we draw the text between m1 and m2
+    void render(Matrix<double> m1, Matrix<double> m2, Matrix<double> m3, std::vector<Point3d>& points, HDC hdc);
+
     void render(Matrix<double> matrix, std::vector<Point3d>& points)
     {
         std::vector<Point3d> out;
@@ -185,6 +177,7 @@ public:
         bool    draw_sw_pillar = false;
         bool    draw_se_pillar = false;
 
+        // calculate all default points
         for (int i = 0; i < number_of_point; i++)
         {
             Matrix<double> pt((double)p[i].x_, (double)p[i].y_, (double)p[i].z_);

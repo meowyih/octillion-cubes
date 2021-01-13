@@ -10,8 +10,6 @@ octillion::StringTable::StringTable()
 bool octillion::StringTable::add(std::shared_ptr<JsonW> json)
 {
     size_t size;
-    std::shared_ptr<octillion::StringData> data = 
-        std::make_shared< octillion::StringData>();
 
     if (json == nullptr)
         return false;
@@ -23,46 +21,70 @@ bool octillion::StringTable::add(std::shared_ptr<JsonW> json)
 
     for (size_t idx = 0; idx < size; idx++)
     {
+        std::shared_ptr<octillion::StringData> data =
+            std::make_shared< octillion::StringData>();
+
         std::shared_ptr<JsonW> jstr = json->get(idx);
-        std::shared_ptr<JsonW> jid, jtext, jattr;
+        std::shared_ptr<JsonW> jid, jtext, jselect;
         
         if (jstr == nullptr)
             return false;
 
         jid = jstr->get(u8"id");
         jtext = jstr->get(u8"text");
-        jattr = jstr->get(u8"attr");
+        jselect = jstr->get(u8"select");
 
         if (jid == nullptr || jtext == nullptr)
             return false;
 
-        if (jid->type() != JsonW::INTEGER || jtext->type() != JsonW::STRING)
+        if (jid->type() != JsonW::INTEGER)
             return false;
 
         data->id_ = (int)(jid->integer());
-        data->str_ = jtext->str();
-        data->wstr_ = jtext->wstr();
 
+        if (jtext->type() == JsonW::STRING)
+        {
+            data->str_.push_back( jtext->str() );
+            data->wstr_.push_back( jtext->wstr() );
+        }
+        else if (jtext->type() == JsonW::ARRAY)
+        {
+            for (size_t i = 0; i < jtext->size(); i++)
+            {
+                std::shared_ptr<JsonW> jtxt = jtext->get(i);
+                if (jtxt->type() != JsonW::STRING)
+                    return false;
+                data->str_.push_back(jtxt->str());
+                data->wstr_.push_back(jtxt->wstr());
+            }
+        }
+        
         auto it = data_.find(data->id_);
         if (it != data_.end())
         {
-            LOG_E(tag_) << "duplicate string table, id:" << data->id_ << " str:" << data->str_ << "|" << (*it).second->str_;
+            LOG_E(tag_) << "duplicate string table, id:" << data->id_ << " " << data->str_.at(0);
             continue;
         }
 
-        data_.insert(std::pair<int, std::shared_ptr<octillion::StringData>>(data->id_, data));
-
-        // check attr
-        if (jattr == nullptr || jattr->type() != JsonW::ARRAY)
-            continue;
-
-        for (size_t i = 0; i < jattr->size(); i++)
+        // check select type
+        if (jselect != nullptr && jselect->type() == JsonW::STRING)
         {
-            std::shared_ptr<JsonW> jint = jattr->get(i);
-            if (jint == nullptr || jint->type() != JsonW::INTEGER)
-                continue;
-            data->attrs_.insert((int)(jint->integer()));
+            if (jselect->str().compare("random") == 0)
+            {
+                data->select_ = octillion::StringTable::SELECT_RANDOMLY;
+            }
+            else if (jselect->str().compare("order") == 0)
+            {
+                data->select_ = octillion::StringTable::SELECT_ORDERLY;
+            }
+            else
+            {
+                LOG_W(tag_) << "bad string select type, string table, id:" << data->id_ << " " << data->str_.at(0) << " select:" << jselect->str();
+            }
         }
+
+        // insert data
+        data_.insert(std::pair<int, std::shared_ptr<octillion::StringData>>(data->id_, data));
     }
 
     return true;

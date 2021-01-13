@@ -20,21 +20,21 @@
         {"type":"2way", "from":"under11", "to":"under10"},
         {"type":"2way", "from":"under11", "to":"under01"}
     ],
-    
+        
     "mobs":
     [
+		{
+            "id": 1,
+            "loc": "under11", 
+			"race": 1,
+			"class": 0,
+			"level": 1,
+			"short": "test mob",
+			"long": "a floating test mob"
+		},
         {
-			"id":1,
-            "level": 1,
-            "race": 1,
-            "subrace": 0,            
-            "loc": "under01"
-        },
-        {
+            "refid": 1,
 			"id":2,
-            "level": 1,
-            "race": 1,
-            "subrace": 0,
             "loc": "under01", 
 			"short": "custom mob",
 			"long": "custom mob with long long description",

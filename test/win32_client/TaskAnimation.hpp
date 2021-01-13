@@ -30,6 +30,7 @@ public:
     int interval_x_ = 0, interval_y_ = 0;
     int dest_degree_x_ = 0, dest_degree_y_ = 0, dest_degree_z_ = 0;
     int start_degree_x_ = 0, start_degree_y_ = 0, start_degree_z_ = 0;
+    double start_scale_ = 0, dest_scale_ = 0;
     std::chrono::milliseconds ms_start_;
     long long duration_ = 0;
 

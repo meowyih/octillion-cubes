@@ -23,10 +23,20 @@ public:
     
     void set(int w, int h, std::shared_ptr<octillion::WorldMap> map);
     
+    // hdc is for text drawing
     std::shared_ptr<std::vector<BYTE>> render(
         octillion::CubePosition loc,
         Matrix<double> matrix, 
         int depth, int flag);
+
+    // hdc is for text drawing
+    std::shared_ptr<std::vector<BYTE>> render(
+        octillion::CubePosition loc,
+        Matrix<double> m1,
+        Matrix<double> m2,
+        Matrix<double> m3,
+        int depth, int flag,
+        HDC hdc);
 
     int width();
     int height();

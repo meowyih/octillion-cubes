@@ -2,6 +2,7 @@
 //
 
 #include <windows.h>
+#include <windowsx.h> // GET_X_LPARAM / GET_Y_LPARAM
 #include "framework.h"
 #include "drawing.h"
 #include "DrawClass.hpp"
@@ -131,6 +132,10 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
    // create child windows without titlebar
    HWND hWndChild = CreateFullscreenWindow(hWnd);
 
+   int iDpi = GetDpiForWindow(hWndChild);
+
+   LOG_D("drawing") << "Dpi is: " << iDpi;
+
    // show child window instead of main window
    ShowWindow(hWndChild, nCmdShow);
    UpdateWindow(hWndChild);
@@ -154,8 +159,42 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
     UINT key_code = 0;
+    int xPos, yPos;
     switch (message)
     {
+    case WM_CREATE:
+    {
+        int iDpi = GetDpiForWindow(hWnd);
+        LOG_D("drawing") << "WM_CREATE, dpi:" << iDpi;
+    }
+    break;
+    case WM_DPICHANGED:
+    {
+        int iDpi = GetDpiForWindow(hWnd);
+        LOG_D("drawing") << "WM_DPICHANGED, dpi:" << iDpi;
+    }
+    break;
+    case WM_LBUTTONDOWN:
+    {
+        RECT rect;
+        GetWindowRect(hWnd, &rect);
+        xPos = GET_X_LPARAM(lParam);
+        yPos = GET_Y_LPARAM(lParam);
+        LOG_D("drawing") << "WM_LBUTTONDOWN: " << xPos << "," << yPos;
+        g_drawer.point(xPos, (rect.bottom - rect.top) - yPos);
+    }
+    break;
+    case WM_POINTERDOWN:
+    {
+        RECT rect;
+        GetWindowRect(hWnd, &rect);
+        xPos = GET_X_LPARAM(lParam);
+        yPos = GET_Y_LPARAM(lParam);
+        LOG_D("drawing") << "WM_POINTERDOWN: " << xPos << "," << yPos << " rect(top/left):" << rect.top << "," << rect.left
+            << " rel:" << (xPos - rect.top) << "," << (yPos - rect.left);
+        g_drawer.point((xPos - rect.top), (rect.bottom - rect.top) - (yPos - rect.left));
+    }
+    break;
     case WM_COMMAND:
         {
             int wmId = LOWORD(wParam);
@@ -258,6 +297,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         LOG_D("main") << "degree:" << g_drawer.degree_x_ << "," << g_drawer.degree_y_ << "," << g_drawer.degree_z_ << " scale:" << g_drawer.scale_;
 
         break;
+    
     case WM_DESTROY:
         PostQuitMessage(0);
         break;

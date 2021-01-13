@@ -1,0 +1,110 @@
+{
+    "id": 10,
+    "title": 1,
+    "offset": [1000, 1000, 1000],
+    "cubes":
+    [
+    {"loc":[10,0,0], "exits":"n", "nstr": 100, "comment": "lv1"},
+    {"loc":[10,1,0], "exits":"ns" },
+    {"loc":[10,2,0], "exits":"us", "ustr": 101},
+    
+    {"loc":[10,2,1], "exits":"dw", "comment": "lv2"},
+    {"loc":[9,2,1], "exits":"se"},
+    {"loc":[9,1,1], "exits":"sn"},
+    {"loc":[9,0,1], "exits":"ne"},
+    {"loc":[10,0,1], "exits":"we"},
+    {"loc":[11,0,1], "exits":"wn"},
+    {"loc":[11,1,1], "exits":"ns"},
+    {"loc":[11,2,1], "exits":"su"},
+    
+    {"loc":[11,2,2], "exits":"dw", "comment": "lv3"},
+    {"loc":[10,2,2], "exits":"e"},
+    
+    {"loc":[10,1,2], "exits":"w", "comment": "lv3, unreachable throne"},
+    {"loc":[9,1,2], "exits":"e"},
+    {"loc":[9,2,2]},
+    {"loc":[9,3,2], "exits":"e"},
+    {"loc":[10,3,2], "exits":"w"},
+    ],
+    
+    "strings":
+    [
+    {"id": 1, "text": "轉生之間" },
+    {"id": 2, "text": 
+        [
+        "你張開眼睛，發現自己身處於一個巨大的白色空間中，四周空一物。你想不起來自己是怎麼到達這個地方的，此時，一個聲音在你腦中響起...",
+        "「年輕的靈魂，先試著移動自己看看。」"]
+    },
+    {"id": 3, "text": "神秘聲音在你腦內響起，「就是這樣，到上層來見我吧。」"},
+    {"id": 50, "select": "random", "text":
+        [
+        "好像有一陣微風吹過...",
+        "天色似乎變暗了一些。",
+        "你在似乎有點想睡了。",
+        "你心中想著「好想睡喔...」",
+        "一陣風吹過，你發了個抖。",
+        "似乎有一點香味從你臉上飄過。"
+        ]
+    },
+    {"id": 100, "text": "你往前走，站在一片白色的長廊中間，左右看似空曠卻無法通過，更遠的前方似乎接著往上的階梯。" },
+    {"id": 101, "select": "order", "text": 
+        [
+        "你走上純白的階梯，邊走邊數，階梯總數是一百零四階。",
+        "你走上純白的階梯，邊走邊數，階梯總數是一百零五階。",
+        "你走上純白的階梯，邊走邊數，階梯總數是一百零六階。"]
+    },
+    {"id": 1001, "text": "轉生管理者" }
+    ],
+    
+    "scripts":
+    [
+    {   
+        "comment": "reset timer everytime player moves",
+        "or":
+        [{ "type": "greater", "move count": 0 },{ "type": "equal", "move count": 0 }],
+        "actions":
+        [{ "type": "reset timer" }]
+    },
+    {
+        "comment": "show string 50 if player idle more than 10 sec",
+        "and":[{ "type": "greater", "timer": 60 }],
+        "actions":
+        [
+        { "type": "text", "string": 50 },
+        { "type": "reset timer" }]
+    },
+    {
+        "comment": "show str 2 before 1st move",
+        "and":
+        [{ "type": "equal", "move count": 0 }],
+        "actions":
+        [{ "type": "text", "string": 2}]
+    },
+    {
+        "comment": "show str 3 after 1st move",
+        "and":
+        [{ "type": "equal", "move count": 1 }],
+        "actions":
+        [{ "type": "text", "string": 3}]
+    },
+    ],
+    
+    "interactives":
+    [
+    {
+        "id": 1,
+        "title": 1001,
+        "loc": [10,0,0],
+        "scripts":
+        [
+        {
+            "comment": "say something after player arrive the throne",
+            "and":
+            [{"type": "equal", "i01":0}],
+            "actions":
+            [{ "type": "text", "string": 1002},{"type": "set", "i01":1}]
+        },
+        ]
+    }
+    ]
+}

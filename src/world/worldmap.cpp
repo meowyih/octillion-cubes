@@ -170,14 +170,14 @@ bool octillion::WorldMap::load_external_data_file( std::string directory, bool u
 
         if (!fin.good())
         {
-			LOG_E(tag_) << "Failed to init area file:" << (*it).second;
+			LOG_E(tag_) << "Failed to open area file:" << (*it).second;
 			return false;
         }
         
         std::shared_ptr<JsonW> json = std::make_shared<JsonW>(fin);
         if (json->valid() == false)
         {
-			LOG_E(tag_) << "Failed to init area file:" << (*it).second;
+			LOG_E(tag_) << "Failed to read area json file:" << (*it).second;
 			return false;
         }
 
@@ -330,8 +330,9 @@ bool octillion::WorldMap::load_external_data_file( std::string directory, bool u
 	// read global links
 	size_t global_link_count = 0;
     std::shared_ptr<JsonW> jglinks = jglobal->get(u8"links");
+    size_t jglinks_size = jglinks == nullptr ? 0 : jglinks->size();
     
-    for (size_t idx = 0; idx < jglinks->size(); idx++)
+    for (size_t idx = 0; idx < jglinks_size; idx++)
     {        
         std::shared_ptr<JsonW> jglink = jglinks->get(idx);
         std::shared_ptr<JsonW> jfrom = jglink->get(u8"from");

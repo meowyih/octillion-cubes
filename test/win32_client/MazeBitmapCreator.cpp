@@ -147,6 +147,9 @@ std::shared_ptr<std::vector<BYTE>> MazeBitmapCreator::render(octillion::CubePosi
     int color = 0xFFFFFF;
     for (auto it = pts.begin(); it != pts.end(); it++)
     {
+        if ((*it).x_ >= w_ || (*it).x_ < 0)
+            continue;
+
         size_t anchor = (*it).y_ * width_size_byte_ + (*it).x_ * Config::get_instance().pixel_size();
         if (anchor >= buffer_->size() || anchor < 0)
             continue;
@@ -180,6 +183,144 @@ std::shared_ptr<std::vector<BYTE>> MazeBitmapCreator::render(octillion::CubePosi
     return buffer_;
 }
 
+std::shared_ptr<std::vector<BYTE>> MazeBitmapCreator::render(octillion::CubePosition loc, Matrix<double> m1, Matrix<double> m2, Matrix<double> m3, int depth, int flag, HDC hdc)
+{
+    bool need_traversal = !(last_pos_ == loc && last_depth_ == depth);
+    bool need_render = need_traversal || !(last_matrix_.equal(m3) && last_render_flag_ == flag);
+
+    // bunch of 3d points prepare for draw on the buffer
+    std::vector<Point3d> pts;
+
+    if (need_render)
+    {
+        std::memset(buffer_->data(), 0, buffer_->size());
+    }
+    else
+    {
+        return buffer_;
+    }
+
+    // traverse the cubes
+    if (need_traversal)
+    {
+        cubes_viewable_.clear();
+        cubes_same_.clear();
+
+        cubes_upper_.clear();
+        cubes_upper_.resize((size_t)depth);
+
+        cubes_lower_.clear();
+        cubes_lower_.resize((size_t)depth);
+
+        traversal(TRAVERSAL_FLAG_ALL, depth, loc, cubes_, cubes_viewable_);
+
+        last_pos_ = loc;
+        last_depth_ = depth;
+    }
+
+    // seperate by level, don't do this if no need to traversal the cubes
+    for (auto it = cubes_viewable_.begin(); it != cubes_viewable_.end(); it++)
+    {
+        if (!need_traversal)
+            break;
+
+        int floor = (*it).first.z() - loc.z();
+
+        if (std::abs(floor) >= depth)
+            continue; // should not happen in BFS
+
+        if (floor == 0)
+        {
+            cubes_same_.insert(
+                std::pair<octillion::CubePosition, std::shared_ptr<Cube3d>>(
+                    (*it).first, (*it).second));
+        }
+        else if (floor > 0)
+        {
+            cubes_upper_.at(floor - 1).insert(
+                std::pair<octillion::CubePosition, std::shared_ptr<Cube3d>>(
+                    (*it).first, (*it).second));
+        }
+        else
+        {
+            cubes_lower_.at(std::abs(floor - 1)).insert(
+                std::pair<octillion::CubePosition, std::shared_ptr<Cube3d>>(
+                    (*it).first, (*it).second));
+        }
+    }
+
+    // render the current plain
+    for (auto it = cubes_same_.begin(); it != cubes_same_.end(); it++)
+    {
+        (*it).second->render(m1, m2, m3, pts, hdc);
+    }
+
+    // render the higher plain
+    for (auto itvec = cubes_upper_.begin(); itvec != cubes_upper_.end(); itvec++)
+    {
+        if (flag == RENDER_FLAG_PLAIN)
+            break;
+
+        // render each layer
+        for (auto it = (*itvec).begin(); it != (*itvec).end(); it++)
+        {
+            (*it).second->render(m1, m2, m3, pts, hdc);
+        }
+    }
+
+    // render the lower plain
+    for (auto itvec = cubes_lower_.begin(); itvec != cubes_lower_.end(); itvec++)
+    {
+        if (flag == RENDER_FLAG_PLAIN)
+            break;
+
+        // render each layer
+        for (auto it = (*itvec).begin(); it != (*itvec).end(); it++)
+        {
+            (*it).second->render(m1, m2, m3, pts, hdc);
+        }
+    }
+
+    // TODO, change color for each cube or each floor later
+    int color = 0xFFFFFF;
+    for (auto it = pts.begin(); it != pts.end(); it++)
+    {
+        if ((*it).x_ >= w_ || (*it).x_ < 0)
+            continue;
+
+        size_t anchor = (*it).y_ * width_size_byte_ + (*it).x_ * Config::get_instance().pixel_size();
+        if (anchor >= buffer_->size() || anchor < 0)
+            continue;
+
+        BYTE* data = buffer_->data();
+        memcpy(data + anchor, &color, 3);
+    }
+
+    // draw center floor
+    pts.clear();
+    auto it = cubes_same_.find(loc);
+    if (it != cubes_same_.end())
+    {
+        (*it).second->render_center(m3, pts);
+    }
+
+    color = 0xFF0000;
+    for (auto it = pts.begin(); it != pts.end(); it++)
+    {
+        size_t anchor = (*it).y_ * width_size_byte_ + (*it).x_ * Config::get_instance().pixel_size();
+        if (anchor >= buffer_->size() || anchor < 0)
+            continue;
+
+        BYTE* data = buffer_->data();
+        memcpy(data + anchor, &color, 3);
+    }
+
+    last_matrix_ = m3;
+    last_render_flag_ = flag;
+
+    return buffer_;
+}
+
 int MazeBitmapCreator::width()
 {
     return w_;
@@ -187,7 +328,7 @@ int MazeBitmapCreator::width()
 
 int MazeBitmapCreator::height()
 {
-    return w_;
+    return h_;
 }
 
 std::shared_ptr<Cube3d> MazeBitmapCreator::cube(octillion::CubePosition pos)

@@ -1,4 +1,3 @@
-
 #include <sstream>
 #include <cstring> // memset
 #include <system_error>
@@ -9,83 +8,12 @@
 
 #include "world/cube.hpp"
 #include "world/event.hpp"
+#include "world/script.hpp"
+#include "world/interactive.hpp"
 
 #include "jsonw/jsonw.hpp"
 #include "error/ocerror.hpp"
 #include "error/macrolog.hpp"
-
-octillion::CubePosition::CubePosition()
-{
-    x_axis_ = 0;
-    y_axis_ = 0;
-    z_axis_ = 0;
-}
-
-octillion::CubePosition::CubePosition(const CubePosition& rhs)
-{
-    x_axis_ = rhs.x_axis_;
-    y_axis_ = rhs.y_axis_;
-    z_axis_ = rhs.z_axis_;
-}
-
-octillion::CubePosition::CubePosition(const CubePosition& rhs, int direction)
-{
-    x_axis_ = rhs.x_axis_;
-    y_axis_ = rhs.y_axis_;
-    z_axis_ = rhs.z_axis_;
-
-    switch (direction)
-    {
-    case Cube::X_INC:
-        x_axis_++;
-        break;
-    case Cube::Y_INC:
-        y_axis_++;
-        break;
-    case Cube::Z_INC:
-        z_axis_++;
-        break;
-    case Cube::X_DEC:
-        x_axis_--;
-        break;
-    case Cube::Y_DEC:
-        y_axis_--;
-        break;
-    case Cube::Z_DEC:
-        z_axis_--;
-        break;    
-    }
-}
-
-octillion::CubePosition::CubePosition(uint_fast32_t x, uint_fast32_t y, uint_fast32_t z)
-{
-    x_axis_ = x;
-    y_axis_ = y;
-    z_axis_ = z;
-}
-
-void octillion::CubePosition::set(uint_fast32_t x, uint_fast32_t y, uint_fast32_t z)
-{
-    x_axis_ = x;
-    y_axis_ = y;
-    z_axis_ = z;
-}
-
-std::string octillion::CubePosition::str()
-{
-    std::ostringstream oss;
-    oss << "(" << x_axis_ << "," << y_axis_ << "," << z_axis_ << ")";
-    return oss.str();
-}
-
-std::shared_ptr<JsonW> octillion::CubePosition::json()
-{
-    std::shared_ptr<JsonW> jobject = std::make_shared<JsonW>();
-    jobject->add("x", (int)x_axis_);
-    jobject->add("y", (int)y_axis_);
-    jobject->add("z", (int)z_axis_);
-    return jobject;
-}
 
 octillion::Cube::Cube(const CubePosition& loc)
 {
@@ -164,7 +92,7 @@ std::string octillion::Cube::title()
     if (title_ptr_ == nullptr)
         return std::string();
 
-    return title_ptr_->str_;
+    return title_ptr_->str_.at(0);
 }
 
 std::wstring octillion::Cube::wtitle()
@@ -172,7 +100,7 @@ std::wstring octillion::Cube::wtitle()
     if (title_ptr_ == nullptr)
         return std::wstring();
 
-    return title_ptr_->wstr_;
+    return title_ptr_->wstr_.at(0);
 }
 
 // parameter type
@@ -192,6 +120,7 @@ octillion::Area::Area( std::shared_ptr<JsonW> json )
     std::map<std::string, CubePosition> markmap;
     std::shared_ptr<JsonW> jvalue;
     std::shared_ptr<JsonW> jstable;
+    std::shared_ptr<JsonW> jscripts;
     
     // invalid json
     if ( json == NULL || json->valid() == false )
@@ -218,24 +147,6 @@ octillion::Area::Area( std::shared_ptr<JsonW> json )
     {
         id_ = (int)(jvalue->integer());
     }
-    
-    // area json must have title
-    jvalue = json->get( u8"title" );
-    if (jvalue != nullptr && jvalue->type() != JsonW::STRING)
-    {
-        title_ = jvalue->str();
-        wtitle_ = jvalue->wstr();
-    }
-    else if (jvalue != nullptr && jvalue->type() != JsonW::INTEGER)
-    {
-        title_ = jvalue->str();
-        wtitle_ = jvalue->wstr();
-    }
-    else
-    {
-        LOG_D(tag_) << "Area init failed, json has no title field";
-        return;
-    }
 
     // check string table
     jstable = json->get(u8"strings");
@@ -247,8 +158,28 @@ octillion::Area::Area( std::shared_ptr<JsonW> json )
             LOG_W(tag_) << "Area " << title_ << " has no string table";
         }
     }
-
     
+    // area json must have title
+    jvalue = json->get( u8"title" );
+    if (jvalue != nullptr && jvalue->type() == JsonW::INTEGER)
+    {
+        int strid = (int)(jvalue->integer());
+
+        if (string_table_.find(strid)->str_.size() == 0 || string_table_.find(strid)->wstr_.size() == 0)
+        {
+            LOG_D(tag_) << "Area init failed, area title does not have good string table id:" << strid;
+            return;
+        }
+
+        title_ = string_table_.find(strid)->str_[0];
+        wtitle_ = string_table_.find(strid)->wstr_[0];
+    }
+    else
+    {
+        LOG_D(tag_) << "Area init failed, json has no valid title field";
+        return;
+    }
+
     // area json must have offset array
     jvalue = json->get( u8"offset" );
     if (jvalue == NULL || jvalue->type() != JsonW::ARRAY )
@@ -267,10 +198,50 @@ octillion::Area::Area( std::shared_ptr<JsonW> json )
         offset_y_ = (int)(jvalue->get(1)->integer());
         offset_z_ = (int)(jvalue->get(2)->integer());
     }
+
+    // read the script
+    jscripts = json->get(u8"scripts");
+    if (jscripts != nullptr && jscripts->type() == JsonW::ARRAY && jscripts->size() > 0)
+    {
+        for (size_t i = 0; i < jscripts->size(); i++)
+        {
+            octillion::Script script;
+            bool success = script.init(jscripts->get(i), markmap, offset_x_, offset_y_, offset_z_);
+            if (!success)
+            {
+                LOG_W(tag_) << "Area " << title_ << " has corrupted script data";
+            }
+            else
+            {
+                scripts_.push_back(script);
+            }
+        }
+    }
+
+    // read interactives
+    jvalue = json->get(u8"interactives");
+    if (jvalue != nullptr && jvalue->type() == JsonW::ARRAY)
+    {
+        for (size_t i = 0; i < jvalue->size(); i++)
+        {
+            std::shared_ptr<octillion::Interactive> interactive
+                = std::make_shared<octillion::Interactive>();
+
+            bool ret = interactive->init(id(), jvalue->get(i), markmap, offset_x_, offset_y_, offset_z_, string_table_);
+            if (ret == false)
+            {
+                LOG_E(tag_) << "Area " << title_ << " detect bad interactive " << jvalue->text();
+                return;
+            }
+            interactives_.push_back(interactive);
+        }
+
+        LOG_D(tag_) << "Read " << jvalue->size() << " interactives in " << title_ << " id:" << id_;
+    }
     
     // area json must have cubes
     jvalue = json->get(u8"cubes");
-    if (jvalue == NULL || jvalue->type() != JsonW::ARRAY )
+    if (jvalue == nullptr || jvalue->type() != JsonW::ARRAY )
     {
         LOG_D(tag_) << "Area init failed, json has no cube field";
         return;
@@ -308,17 +279,12 @@ octillion::Area::Area( std::shared_ptr<JsonW> json )
         
         // get title
         std::shared_ptr<JsonW> jtitle = jcube->get( u8"title" );
-        if (jtitle == nullptr || jtitle->type() != JsonW::INTEGER )
-        {
-            LOG_D(tag_) << "Area init failed, json has a cube with bad/no title";
-            return;
-        }
-        else
+        if (jtitle != nullptr && jtitle->type() == JsonW::INTEGER )        
         {
             int strid = (int)(jtitle->integer());
             title_ptr = string_table_.find(strid);
         }
-
+        
         // get mark if exist (optional)        
         std::shared_ptr<JsonW> jmark = jcube->get( u8"mark" );
         if (jmark != NULL && jmark->type() == JsonW::STRING )
@@ -371,6 +337,49 @@ octillion::Area::Area( std::shared_ptr<JsonW> json )
                 cube->exits_[octillion::Cube::Z_INC] = octillion::Cube::EXIT_NORMAL;
             if (exits.find('d') != std::string::npos)
                 cube->exits_[octillion::Cube::Z_DEC] = octillion::Cube::EXIT_NORMAL;
+        }
+
+        // read exits' desc (options)
+        std::shared_ptr<JsonW> jdesc = jcube->get(u8"nstr");
+        if (jdesc != nullptr && jdesc->type() == JsonW::INTEGER)
+        {
+            int strid = (int)(jdesc->integer());
+            cube->desc_exits_[octillion::Cube::Y_INC] = string_table_.find(strid);
+        }
+
+        jdesc = jcube->get(u8"estr");
+        if (jdesc != nullptr && jdesc->type() == JsonW::INTEGER)
+        {
+            int strid = (int)(jdesc->integer());
+            cube->desc_exits_[octillion::Cube::X_INC] = string_table_.find(strid);
+        }
+
+        jdesc = jcube->get(u8"wstr");
+        if (jdesc != nullptr && jdesc->type() == JsonW::INTEGER)
+        {
+            int strid = (int)(jdesc->integer());
+            cube->desc_exits_[octillion::Cube::X_DEC] = string_table_.find(strid);
+        }
+
+        jdesc = jcube->get(u8"sstr");
+        if (jdesc != nullptr && jdesc->type() == JsonW::INTEGER)
+        {
+            int strid = (int)(jdesc->integer());
+            cube->desc_exits_[octillion::Cube::Y_DEC] = string_table_.find(strid);
+        }
+
+        jdesc = jcube->get(u8"ustr");
+        if (jdesc != nullptr && jdesc->type() == JsonW::INTEGER)
+        {
+            int strid = (int)(jdesc->integer());
+            cube->desc_exits_[octillion::Cube::Z_INC] = string_table_.find(strid);
+        }
+
+        jdesc = jcube->get(u8"dstr");
+        if (jdesc != nullptr && jdesc->type() == JsonW::INTEGER)
+        {
+            int strid = (int)(jdesc->integer());
+            cube->desc_exits_[octillion::Cube::Z_DEC] = string_table_.find(strid);
         }
     }
     
